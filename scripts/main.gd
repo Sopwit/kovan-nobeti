@@ -94,7 +94,8 @@ var debug_ui := "":
 		if v == "hive" and ui != null:
 			ui.open_hive()
 			return
-		if game == null or state != PLAY:
+		if game == null or state != PLAY or not bot_mode:
+			# the test switches below change a run: they only work for the bot, which never saves
 			return
 		if v == "ult":
 			game.ult = 1.0
@@ -343,6 +344,7 @@ func to_menu() -> void:
 	get_tree().paused = false
 	Engine.time_scale = 1.0
 	game.active = false
+	game.queue.clear()
 	enemies.clear()
 	pickups.reset()
 	weapons.reset()

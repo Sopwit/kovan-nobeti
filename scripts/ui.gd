@@ -48,6 +48,7 @@ var menu_btns: Array[Button] = []
 var settings_ok: Button
 var end_lock := 0.0
 var end_goal: Label
+var hive_opened := 0
 var end_hive: Button
 var reroll_btn: Button
 var hive_panel: Control
@@ -389,6 +390,9 @@ func _refresh_hive() -> void:
 		t.button.disabled = not can
 
 func _buy(id: String) -> void:
+	# a double click on the button that opened the apiary must not land on a tile and spend honey
+	if Time.get_ticks_msec() - hive_opened < 400:
+		return
 	if main.buy_meta(id):
 		main.audio.play("chest", -4.0, 1.2)
 		_refresh_hive()
@@ -399,6 +403,7 @@ func open_hive() -> void:
 	_refresh_hive()
 	menu.visible = false
 	hive_panel.visible = true
+	hive_opened = Time.get_ticks_msec()
 	hive_back.grab_focus()
 
 func close_hive() -> void:
@@ -457,6 +462,8 @@ func show_menu() -> void:
 	hud.visible = false
 	pause_panel.visible = false
 	choice_panel.visible = false
+	# the menu can be reached from the pause menu over the card panel: no choice stays open behind it
+	choosing = false
 	end_panel.visible = false
 	var r: Dictionary = main.record
 	if r.get("runs", 0) > 0:
@@ -696,8 +703,7 @@ func _choose(i: int) -> void:
 		main.weapons.push_back(main.player.pos, 6.5, 16.0)
 		main.player.inv_t = maxf(main.player.inv_t, 0.5)
 	else:
-		var kind: String = main.game.queue.pop_front()
-		show_choice(kind, main.game.cards_for(kind))
+		main.game.pop_choice()
 
 # ---------- end screen
 
@@ -842,7 +848,8 @@ func _process(dt: float) -> void:
 			end_hive.disabled = false
 	# hints and toasts wait while the game is paused, so a level-up cannot swallow them
 	if not get_tree().paused:
-		if toast_t > 0.0:
+		# a toast waits for a banner to clear instead of running out behind it
+		if toast_t > 0.0 and banner_t <= 0.0:
 			toast_t -= dt
 		if banner_t > 0.0:
 			banner_t -= dt

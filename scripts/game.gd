@@ -433,8 +433,10 @@ func on_enemy_killed(t: int, at: Vector3, elite: bool, s: float) -> void:
 			var ga := TAU * k / 10.0
 			main.pickups.drop_gem(at + Vector3(cos(ga) * 2.2, 0, sin(ga) * 2.2), 6)
 		main.player.heal(20.0)
-		evo_chests += 1
-		main.ui.banner(CHAMP_NAMES[t - main.enemies.T_STAG] + " DEVRİLDİ", "Sandığı bir silahını evriltir")
+		var prize := not _evo_ids().is_empty()
+		if prize:
+			evo_chests += 1
+		main.ui.banner(CHAMP_NAMES[t - main.enemies.T_STAG] + " DEVRİLDİ", "Sandığı bir silahını evriltir" if prize else "Sandığını al")
 		stats.champs = stats.get("champs", 0) + 1
 		return
 	var v: int = main.enemies.TYPES[t].xp
@@ -518,8 +520,19 @@ func _win(at: Vector3) -> void:
 	main.pickups.pull_all()
 
 func slow(secs: float, k: float) -> void:
+	# a short beat never cuts a longer staged one short
+	if slow_t > secs:
+		return
 	slow_t = secs
 	slow_k = k
+
+# Shows the next queued choice. A champion's prize is decided here, not when the chest was picked up:
+# if no weapon is left to evolve by now, it opens as an ordinary chest.
+func pop_choice() -> void:
+	var kind: String = queue.pop_front()
+	if kind == "evo" and _evo_ids().is_empty():
+		kind = "chest"
+	main.ui.show_choice(kind, cards_for(kind))
 
 func _run_cues(real: float) -> void:
 	if slow_t > 0.0:
@@ -621,8 +634,7 @@ func update(dt: float) -> void:
 		elif time >= 430.0 and not boss_spawned and main.audio.current == "oyun2":
 			main.audio.music("gece")
 		if not queue.is_empty() and not main.ui.choosing:
-			var kind: String = queue.pop_front()
-			main.ui.show_choice(kind, cards_for(kind))
+			pop_choice()
 
 func _ring_pos(dmin: float, dmax: float) -> Vector2:
 	var p: Vector3 = main.player.pos
@@ -669,7 +681,7 @@ func _spawn(dt: float) -> void:
 				# probe (kept away, or weak against one body) is measured by a share of what it does to the
 				# swarm instead, so staying back never shrinks her into a short fight.
 				var est := maxf(boss_taken / BOSS_PROBE, boss_recent * 0.15)
-				var remain := clampf(est * 62.0, 200.0 * level, 190000.0)
+				var remain := clampf(est * 68.0, 200.0 * level, 190000.0)
 				var frac: float = clampf(en.hp[bi] / en.maxhp[bi], 0.3, 1.0)
 				en.hp[bi] = remain
 				en.maxhp[bi] = remain / frac

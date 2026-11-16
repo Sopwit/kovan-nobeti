@@ -20,7 +20,10 @@ def load(name):
             a = np.interp(np.arange(0, len(a), w.getframerate() / RATE), np.arange(len(a)), a)
         return a
 
-def bed(gaps, secs=20.0, extra={"hit": -3.0}):
+# the trims the game applies on top of the table when it plays each sound (fx.hit, the bee shot, weapon blasts)
+EXTRA = {"hit": -3.0, "shoot": -6.0, "explosion": -5.0}
+
+def bed(gaps, secs=20.0, extra=EXTRA):
     out = np.zeros(int(secs * RATE) + RATE)
     for name, gap in gaps.items():
         clip = load(name) * 10 ** ((sfx[name][1] - sfx[name][0] + extra.get(name, 0.0)) / 20.0)
@@ -41,6 +44,7 @@ if len(sys.argv) > 2:
     for pair in sys.argv[2].split(","):
         k, v = pair.split("=")
         sfx[k] = (sfx[k][0], float(v), sfx[k][2])
+pathlib.Path(base).parent.mkdir(parents=True, exist_ok=True)
 write(base + "_busy.wav", bed({"hit": 0.12, "kill": 0.14, "gem": 0.12, "shoot": 0.3, "explosion": 0.8}))
 write(base + "_max.wav", bed({k: sfx[k][2] for k in ["hit", "kill", "gem", "shoot", "explosion"]}))
 print("wrote", base + "_busy.wav", base + "_max.wav")

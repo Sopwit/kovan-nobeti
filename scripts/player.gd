@@ -125,8 +125,9 @@ func menu_idle(dt: float) -> void:
 	_update_camera(dt)
 
 func look(rel: Vector2) -> void:
-	# the mouse always wins over a camera that is drifting back from a staged shot
-	pitch_back = false
+	# the mouse wins over a camera that is drifting back from a staged shot, but not during the shot itself
+	if focus_t <= 0.0:
+		pitch_back = false
 	var s: float = main.settings.sens * 0.0032
 	cam_yaw -= rel.x * s
 	cam_pitch = clampf(cam_pitch - rel.y * s, -1.2, -0.08)

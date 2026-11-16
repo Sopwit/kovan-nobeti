@@ -283,6 +283,7 @@ func spawn(t: int, x: float, z: float, is_elite := false, hp_mult := 1.0) -> int
 		boss_uid = uid[i]
 		boss_state = 0
 		boss_raged = false
+		boss_attack_i = 0
 		boss_t = 2.5
 		scl[i] = d.size
 		spd[i] = d.speed
@@ -676,7 +677,7 @@ func update(dt: float) -> void:
 				atk_cd[i] = 0.75
 				main.game.note_hit(TYPES[t].key)
 		# draw
-		var s := scl[i] * (1.0 + flash[i] * 0.18)
+		var s := scl[i] * (1.0 + maxf(0.0, flash[i]) * 0.18)
 		var act := 1.0
 		var squat := 1.0
 		if t == T_BOOM and st[i] == 1:
@@ -980,8 +981,10 @@ func _boss_y() -> float:
 func _boss_update(i: int, dt: float, nx: float, nz: float, d: float) -> Vector2:
 	boss_t -= dt
 	var enraged := hp[i] < maxhp[i] * 0.5
-	if enraged and not boss_raged:
+	if enraged and not boss_raged and not main.game.over:
 		boss_raged = true
+		# her first move in the second half is the new one
+		boss_attack_i = 3
 		main.game.boss_rage(Vector3(px[i], 0, pz[i]))
 	match boss_state:
 		0:
