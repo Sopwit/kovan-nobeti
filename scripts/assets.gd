@@ -7,6 +7,8 @@ const NORM := {
 	"bocek": ["w", 0.0], "esekarisi": ["w", 90.0], "gergedan": ["w", 0.0], "tukuren": ["w", 0.0], "kralice": ["w", 0.0],
 	"kovan": ["h", 0.0], "sunak": ["h", 0.0], "agac": ["h", 0.0], "kavanoz": ["h", 0.0],
 }
+# how much each generated texture is darkened (1 = as is)
+const GRADE := {"bocek": 1.7, "esekarisi": 1.15, "gergedan": 1.25, "tukuren": 1.15, "kralice": 1.2}
 const FALLBACK_COL := {
 	"bocek": Color(0.5, 0.2, 0.7), "esekarisi": Color(0.9, 0.2, 0.2), "gergedan": Color(0.3, 0.25, 0.7),
 	"tukuren": Color(0.95, 0.3, 0.6), "kralice": Color(0.8, 0.1, 0.2), "kovan": Color(0.95, 0.7, 0.15),
@@ -28,10 +30,21 @@ shader_type spatial;
 uniform sampler2D tex : source_color, filter_linear_mipmap;
 uniform vec4 tint : source_color = vec4(1.0);
 uniform float use_tex = 1.0;
+uniform float grade = 1.0;
 varying float fl;
+const float BAYER[16] = float[](0.0, 8.0, 2.0, 10.0, 12.0, 4.0, 14.0, 6.0, 3.0, 11.0, 1.0, 9.0, 15.0, 7.0, 13.0, 5.0);
 void vertex() { fl = INSTANCE_CUSTOM.x; }
 void fragment() {
-	vec3 c = mix(tint.rgb, texture(tex, UV).rgb, use_tex) * COLOR.rgb;
+	// bodies that come between the camera and the player dissolve instead of blocking the view
+	float near = smoothstep(1.5, 4.5, length(VERTEX));
+	int bx = int(FRAGCOORD.x) % 4;
+	int by = int(FRAGCOORD.y) % 4;
+	if (near < (BAYER[bx + by * 4] + 0.5) / 16.0) { discard; }
+	vec3 c = mix(tint.rgb, texture(tex, UV).rgb, use_tex);
+	// image-to-3D washes the texture out; grade pulls it back towards the source image
+	c = pow(c, vec3(grade));
+	float l = dot(c, vec3(0.3, 0.6, 0.1));
+	c = mix(vec3(l), c, 1.0 + (grade - 1.0) * 0.5) * COLOR.rgb;
 	ALBEDO = mix(c, vec3(1.0), fl * 0.8);
 	EMISSION = vec3(1.0, 0.9, 0.7) * fl * 1.2;
 	ROUGHNESS = 0.8;
@@ -47,10 +60,10 @@ void fragment() {
 	float r = length(p);
 	float a = atan(p.y, p.x);
 	float swirl = sin(a * 6.0 + TIME * 1.6 + r * 5.0) * 0.5 + 0.5;
-	float ring = smoothstep(0.62, 0.93, r) * (1.0 - smoothstep(0.95, 1.0, r));
-	float fill = (1.0 - smoothstep(0.9, 1.0, r)) * 0.07;
+	float ring = smoothstep(0.76, 0.95, r) * (1.0 - smoothstep(0.96, 1.0, r));
+	float fill = (1.0 - smoothstep(0.9, 1.0, r)) * 0.05;
 	ALBEDO = mix(vec3(0.95, 0.97, 0.9), vec3(1.0, 0.9, 0.55), pulse * 0.6);
-	ALPHA = clamp((ring * (0.3 + 0.3 * swirl) + fill) * (1.0 + pulse * 0.9), 0.0, 0.9);
+	ALPHA = clamp((ring * (0.10 + 0.18 * swirl) + fill * 0.5) * (1.0 + pulse * 0.7), 0.0, 0.5);
 }
 """
 	if ResourceLoader.exists("res://assets/tex/ikonlar.png"):
@@ -138,6 +151,7 @@ func enemy_material(key: String) -> ShaderMaterial:
 	_mesh(key)
 	var m := ShaderMaterial.new()
 	m.shader = enemy_shader
+	m.set_shader_parameter("grade", GRADE.get(key, 1.0))
 	if textures.has(key):
 		m.set_shader_parameter("tex", textures[key])
 		m.set_shader_parameter("use_tex", 1.0)
@@ -149,10 +163,15 @@ func enemy_material(key: String) -> ShaderMaterial:
 func prop_mesh(key: String) -> Mesh:
 	return _mesh(key)
 
-func prop_material(key: String) -> StandardMaterial3D:
+func prop_material(key: String, fade_near := false) -> StandardMaterial3D:
 	_mesh(key)
 	var m := StandardMaterial3D.new()
 	m.roughness = 0.85
+	if fade_near:
+		# scenery between the camera and the player dissolves
+		m.distance_fade_mode = BaseMaterial3D.DISTANCE_FADE_PIXEL_DITHER
+		m.distance_fade_min_distance = 3.0
+		m.distance_fade_max_distance = 9.0
 	if textures.has(key):
 		m.albedo_texture = textures[key]
 	else:
@@ -408,7 +427,7 @@ func stinger_mesh() -> Mesh:
 
 func bolt_mesh() -> Mesh:
 	var b := BoxMesh.new()
-	b.size = Vector3(0.12, 0.12, 1.0)
+	b.size = Vector3(0.07, 0.07, 1.0)
 	var m := StandardMaterial3D.new()
 	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	m.albedo_color = Color(1.0, 0.95, 0.5)
@@ -423,9 +442,10 @@ func gem_mesh() -> Mesh:
 	s.rings = 1
 	var m := StandardMaterial3D.new()
 	m.vertex_color_use_as_albedo = true
+	m.vertex_color_is_srgb = true
 	m.emission_enabled = true
 	m.emission = Color(1.0, 0.7, 0.1)
-	m.emission_energy_multiplier = 0.9
+	m.emission_energy_multiplier = 0.5
 	m.roughness = 0.3
 	s.material = m
 	return s

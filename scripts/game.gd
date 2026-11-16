@@ -24,6 +24,14 @@ const UPG := [
 	{"id": "inis", "name": "Ezici İniş", "icon": 16, "max": 5, "kind": "p", "desc": "Zıplayıp inince şok dalgası, +12 hasar"},
 	{"id": "kayis", "name": "Dikenli Kayış", "icon": 17, "max": 5, "kind": "p", "desc": "Kayarken çarptığın düşman +14 hasar alır, kayma sıklaşır"},
 ]
+# A weapon at its last level evolves once its partner trait is high enough: weapon id -> [trait id, trait level, name, text]
+const EVO := {
+	"ari": ["cogalt", 2, "Kraliyet Sürüsü", "+3 arı, +10 hasar, iki delme daha"],
+	"tutsu": ["menzil", 3, "Kara Duman", "Halka %45 genişler, +10 hasar"],
+	"bomba": ["ofke", 3, "Bal Yağmuru", "+2 bomba, +30 hasar, patlama %25 genişler"],
+	"igne": ["cizme", 3, "Diken Fırtınası", "+4 iğne, +14 hasar, çark hızlanır"],
+	"kivilcim": ["saat", 3, "Polen Fırtınası", "+6 sekme, +20 hasar, %40 daha sık çakar"],
+}
 const HEAL_CARD := {"id": "sifa", "name": "Bal Kavanozu", "icon": 18, "max": 999, "kind": "p", "desc": "40 can iyileşir"}
 const SRC_NAMES := {"ari": "Arı Sürüsü", "tutsu": "Tütsü Halkası", "bomba": "Bal Bombası", "igne": "İğne Çarkı", "kivilcim": "Polen Kıvılcımı", "inis": "Ezici İniş", "kayis": "Dikenli Kayış", "sunak": "Sunak"}
 const KILL_COL := [Color(0.6, 0.25, 0.8), Color(0.95, 0.25, 0.2), Color(0.4, 0.3, 0.8), Color(1.0, 0.4, 0.7), Color(1.0, 0.2, 0.2)]
@@ -47,7 +55,9 @@ var over := false
 var victory := false
 var end_t := 0.0
 var recycle_i := 0
-var god := false
+var next_log := 30.0
+var last_dealt := 0.0
+var last_kills := 0
 
 func setup(m) -> void:
 	main = m
@@ -64,12 +74,20 @@ func start() -> void:
 	queue.clear()
 	stats = {"taken": 0.0, "dealt": 0.0, "by": {}, "chests": 0, "shrines": 0}
 	spawn_acc = 3.0
+	hits = {}
+	mark_dealt = -1.0
+	boss_taken = 0.0
+	boss_t = 0.0
+	boss_sized = false
 	next_wave = 60.0
 	next_elite = 110.0
 	boss_spawned = false
 	over = false
 	victory = false
 	end_t = 0.0
+	next_log = 30.0
+	last_dealt = 0.0
+	last_kills = 0
 	Engine.time_scale = main.debug_speed
 	main.enemies.clear()
 	main.weapons.reset()
@@ -80,17 +98,30 @@ func start() -> void:
 	main.audio.music("oyun1")
 
 func _need(l: int) -> int:
-	return 5 + 3 * l + int(0.3 * l * l)
+	return 4 + 5 * l + int(0.7 * l * l)
 
 func hp_scale() -> float:
 	var m := time / 60.0
-	return 1.0 + m * 0.2 + m * m * 0.014
+	return 1.0 + m * 0.3 + m * m * 0.06
 
 func upg(id: String) -> Dictionary:
 	for u in UPG:
 		if u.id == id:
 			return u
 	return HEAL_CARD
+
+func evo_ready(id: String) -> bool:
+	var e: Array = EVO[id]
+	return passives.get(e[0], 0) >= e[1]
+
+# The trait a weapon needs for its evolution, or the weapon a trait feeds; "" when there is none.
+func evo_partner(id: String) -> String:
+	if EVO.has(id):
+		return EVO[id][0]
+	for w in EVO:
+		if EVO[w][0] == id and main.weapons.levels[w] > 0:
+			return w
+	return ""
 
 func level_of(id: String) -> int:
 	if main.weapons.levels.has(id):
@@ -103,6 +134,10 @@ func choices() -> Array:
 	for u in UPG:
 		var l := level_of(u.id)
 		if l >= u.max:
+			if u.kind == "w" and l == u.max and evo_ready(u.id):
+				var e: Array = EVO[u.id]
+				pool.append({"id": u.id, "name": e[2], "icon": u.icon, "max": u.max + 1, "kind": "e", "desc": e[3]})
+				weights.append(6.0)
 			continue
 		pool.append(u)
 		if u.kind == "w":
@@ -153,7 +188,7 @@ func apply(id: String) -> void:
 func _recalc() -> void:
 	var pl = main.player
 	var w = main.weapons
-	pl.move_speed = 8.6 * (1.0 + 0.08 * passives.get("cizme", 0))
+	pl.move_speed = 8.2 * (1.0 + 0.08 * passives.get("cizme", 0))
 	pl.pickup_r = 3.2 * (1.0 + 0.35 * passives.get("miknatis", 0))
 	pl.armor = 1.5 * passives.get("tulum", 0)
 	pl.regen = 0.5 * passives.get("yaprak", 0)
@@ -187,6 +222,21 @@ func shrine_done(at: Vector3) -> void:
 	main.audio.play("shrine")
 	main.ui.toast("Sunak uyandı, kalıcı +%15 hasar")
 
+# who hurt the player, by source: only read by the bot telemetry
+var hits := {}
+# damage total and clock a while before the boss: her health is sized from the damage the build really deals
+var mark_dealt := -1.0
+var mark_time := 0.0
+# The boss fight is sized twice: a first guess at her arrival, then once from the damage she really
+# takes in the opening seconds, because damage against one big target differs a lot between builds.
+const BOSS_PROBE := 10.0
+var boss_taken := 0.0
+var boss_t := 0.0
+var boss_sized := false
+
+func note_hit(k: String) -> void:
+	hits[k] = hits.get(k, 0) + 1
+
 func on_damage_dealt(a: float, src: String) -> void:
 	stats.dealt += a
 	stats.by[src] = stats.by.get(src, 0.0) + a
@@ -196,21 +246,34 @@ func on_enemy_killed(t: int, at: Vector3, elite: bool, s: float) -> void:
 	main.audio.play("kill", 0.0, randf_range(0.85, 1.2))
 	main.fx.burst(at + Vector3(0, 0.4, 0), KILL_COL[t], 8 + int(s * 3.0), 5.0 + s)
 	if t == main.enemies.T_BOSS:
+		main.hit_stop = 0.22
 		_win(at)
 		return
 	var v: int = main.enemies.TYPES[t].xp
 	if elite:
 		main.pickups.drop_gem(at, 25)
 		main.pickups.drop_item("chest", at)
-		main.fx.shake(0.4)
+		main.fx.shake(0.5)
+		main.fx.explosion(at, 4.0, KILL_COL[t])
+		main.hit_stop = 0.09
 	else:
+		if t == main.enemies.T_BRUTE:
+			main.fx.shake(0.36)
+			main.hit_stop = maxf(main.hit_stop, 0.045)
+		else:
+			main.fx.shake(0.2)
 		main.pickups.drop_gem(at, v)
-		if randf() < 0.004:
+		var roll := randf()
+		if roll < 0.004:
 			main.pickups.drop_item("magnet", at)
+		elif roll < (0.16 if t == main.enemies.T_BRUTE else 0.013) and main.pickups.count_of("heal") < 5:
+			main.pickups.drop_item("heal", at)
 
 func on_player_dead() -> void:
 	if over:
 		return
+	if main.bot_mode:
+		print("T DEAD t=%d lv=%d kills=%d alive=%d edge=%d hits=%s w=%s p=%s" % [int(time), level, kills, main.enemies.count, int(main.world.ARENA_R - Vector2(main.player.pos.x, main.player.pos.z).length()), str(hits), str(main.weapons.levels.values()), str(passives)])
 	over = true
 	victory = false
 	end_t = 1.6
@@ -218,6 +281,8 @@ func on_player_dead() -> void:
 	main.audio.play("defeat")
 
 func _win(at: Vector3) -> void:
+	if main.bot_mode:
+		print("T WIN t=%d lv=%d kills=%d hp=%d hits=%s w=%s p=%s" % [int(time), level, kills, int(main.player.hp), str(hits), str(main.weapons.levels.values()), str(passives)])
 	over = true
 	victory = true
 	end_t = 2.6
@@ -252,6 +317,12 @@ func update(dt: float) -> void:
 	main.pickups.update(dt)
 	main.world.update(dt)
 	main.fx.update(dt)
+	if main.bot_mode and time >= next_log:
+		# bot telemetry for balancing: one line per 30 s of game time
+		print("T t=%d lv=%d kills=%d (+%d) alive=%d hp=%d/%d dps=%d taken=%d fps=%d w=%s" % [int(time), level, kills, kills - last_kills, main.enemies.count, int(main.player.hp), int(main.player.max_hp), int((stats.dealt - last_dealt) / 30.0), int(stats.taken), int(Engine.get_frames_per_second()), str(main.weapons.levels.values())])
+		next_log += 30.0
+		last_dealt = stats.dealt
+		last_kills = kills
 	if not over:
 		_spawn(dt)
 		if time >= 300.0 and not boss_spawned and main.audio.current == "oyun1":
@@ -275,7 +346,7 @@ func _ring_pos(dmin: float, dmax: float) -> Vector2:
 func _pick_type() -> int:
 	var en = main.enemies
 	var r := randf()
-	if time > 300.0 and r < minf(0.13, (time - 300.0) / 1500.0 + 0.05):
+	if time > 300.0 and r < minf(0.08, (time - 300.0) / 3000.0 + 0.03):
 		return en.T_SPIT
 	r = randf()
 	if time > 170.0 and r < minf(0.11, (time - 170.0) / 2500.0 + 0.04):
@@ -288,17 +359,38 @@ func _pick_type() -> int:
 func _spawn(dt: float) -> void:
 	var en = main.enemies
 	var boss_alive: bool = en.boss_uid >= 0
-	var target := int(clampf(10.0 + time * 0.52, 10.0, 340.0))
+	if boss_alive and boss_taken > 0.0:
+		# the probe clock starts with the first hit on her, not with her walk in
+		boss_t += dt
+		if not boss_sized and boss_t >= BOSS_PROBE:
+			boss_sized = true
+			var bi: int = en.boss_index()
+			if bi >= 0:
+				# a stronger build gets a shorter fight, but every build gets a fight
+				var secs := lerpf(60.0, 34.0, clampf((level - 24.0) / 20.0, 0.0, 1.0))
+				var remain := clampf(boss_taken / BOSS_PROBE * secs, 200.0 * level, 150000.0)
+				var frac: float = clampf(en.hp[bi] / en.maxhp[bi], 0.3, 1.0)
+				en.hp[bi] = remain
+				en.maxhp[bi] = remain / frac
+				if main.bot_mode:
+					print("T BOSS sized remain=%d boss_dps=%d" % [int(remain), int(boss_taken / BOSS_PROBE)])
+	# The crowd size is designed, not left to chance: spawning speeds up while the field is below the
+	# target and slows to a trickle above it, so a strong build gets more to mow down (and more
+	# experience) while a weak one is never buried under a backlog.
+	var target := int(clampf(24.0 + time * 0.33, 24.0, 240.0))
 	if boss_alive:
-		target = 120
-	spawn_acc += dt * (1.6 + time * 0.034)
+		target = 90
+	var faucet := 1.7 + minf(time, 300.0) * 0.04 + maxf(0.0, time - 300.0) * 0.03
+	var rate := clampf(float(target - en.count) / 3.0, faucet * 0.5, faucet * 1.6)
+	spawn_acc += dt * rate
+	var hard_cap := int(target * 1.35)
 	var n := 0
-	while spawn_acc >= 1.0 and en.count < target and n < 12:
+	while spawn_acc >= 1.0 and en.count < hard_cap and n < 12:
 		spawn_acc -= 1.0
 		n += 1
-		var p := _ring_pos(24.0, 31.0)
+		var p := _ring_pos(17.0, 27.0)
 		en.spawn(_pick_type(), p.x, p.y, false, hp_scale())
-	if en.count >= target:
+	if en.count >= hard_cap:
 		spawn_acc = minf(spawn_acc, 1.0)
 	# stragglers far behind the player rejoin the ring around them
 	var pl: Vector3 = main.player.pos
@@ -310,14 +402,17 @@ func _spawn(dt: float) -> void:
 		if en.dead[i] == 0 and en.typ[i] != en.T_BOSS and en.elite[i] == 0:
 			var dx: float = en.px[i] - pl.x
 			var dz: float = en.pz[i] - pl.z
-			if dx * dx + dz * dz > 46.0 * 46.0:
-				var p2 := _ring_pos(26.0, 32.0)
+			if dx * dx + dz * dz > 38.0 * 38.0:
+				var p2 := _ring_pos(18.0, 26.0)
 				en.px[i] = p2.x
 				en.pz[i] = p2.y
+				en.born[i] = 0.5
 	if time >= next_wave and not boss_spawned:
 		next_wave += 60.0
-		var cnt := 14 + int(time / 18.0)
 		var wt: int = en.T_WASP if (time > 200.0 and int(time / 60.0) % 2 == 0) else en.T_BEETLE
+		var cnt := 14 + int(time / 18.0)
+		if wt == en.T_WASP:
+			cnt = 8 + int(time / 30.0)
 		var a0 := randf() * TAU
 		for k in cnt:
 			var a := a0 + TAU * k / cnt
@@ -334,10 +429,20 @@ func _spawn(dt: float) -> void:
 		en.spawn(et, p3.x, p3.y, true, hp_scale() * (2.0 if et == en.T_BEETLE else 1.0))
 		main.ui.toast("Elit geldi, sandığı onda")
 		main.audio.play("horn", 0.0, 0.8)
+	if mark_dealt < 0.0 and time >= BOSS_TIME - 45.0:
+		mark_dealt = stats.dealt
+		mark_time = time
 	if time >= BOSS_TIME and not boss_spawned:
 		boss_spawned = true
 		var p4 := _ring_pos(28.0, 30.0)
-		en.spawn(en.T_BOSS, p4.x, p4.y, false, 1.0)
+		# a fight of about a minute for any build: a strong one still ends it sooner
+		var recent := 40.0 * level
+		if time - mark_time > 5.0:
+			recent = (stats.dealt - mark_dealt) / (time - mark_time)
+		var boss_hp := clampf(10000.0 + recent * 9.0, 14000.0, 120000.0)
+		if main.bot_mode:
+			print("T BOSS hp=%d recent_dps=%d" % [int(boss_hp), int(recent)])
+		en.spawn(en.T_BOSS, p4.x, p4.y, false, boss_hp / float(en.TYPES[en.T_BOSS].hp))
 		main.ui.toast("KRALİÇE GELDİ")
 		main.audio.play("boss_roar")
 		main.audio.music("boss")

@@ -34,9 +34,13 @@ var paused := false
 var settings := {"sens": 1.0, "music": 0.9, "sfx": 0.8, "brightness": 1.0}
 var record := {"runs": 0, "best_time": 0.0, "best_kills": 0, "wins": 0}
 var menu_yaw := 0.0
+# real seconds the simulation stays frozen after a heavy kill
+var hit_stop := 0.0
 
 # test hooks: the demo bot plays by itself and never touches the saved record
 var bot_mode := false
+# with --once a bot run quits when it ends, for balance runs from the command line
+var bot_once := false
 var debug_god := false
 var debug_speed := 1.0:
 	set(v):
@@ -56,7 +60,25 @@ var debug_levels := 0:
 		if game != null and v > 0:
 			for i in v:
 				game.level += 1
+				game.xp_need = game._need(game.level)
 				game.queue.append("level")
+# "choice" holds an upgrade panel open, "pause" opens the pause menu, "win" and "lose" end the run
+var debug_ui := "":
+	set(v):
+		debug_ui = v
+		if game == null or state != PLAY:
+			return
+		if v == "choice":
+			ui.hold_choice = true
+			game.queue.append("level")
+		elif v == "pause":
+			toggle_pause()
+		elif v == "win":
+			game._win(player.pos)
+		elif v == "lose":
+			player.hp = 0.0
+			player.alive = false
+			game.on_player_dead()
 var debug_start := false:
 	set(v):
 		debug_start = v
@@ -72,6 +94,8 @@ func _ready() -> void:
 	for a in OS.get_cmdline_user_args():
 		if a == "--bot":
 			bot_mode = true
+		elif a == "--once":
+			bot_once = true
 		elif a == "--god":
 			debug_god = true
 		elif a.begins_with("--speed="):
@@ -110,6 +134,9 @@ func _ready() -> void:
 	ui = Ui.new()
 	add_child(ui)
 	ui.setup(self)
+	var names := {"World": world, "Fx": fx, "Enemies": enemies, "Player": player, "Weapons": weapons, "Pickups": pickups, "Game": game, "Audio": audio, "Ui": ui}
+	for key in names:
+		names[key].name = key
 	for n in [world, fx, enemies, player, weapons, pickups, game]:
 		n.process_mode = Node.PROCESS_MODE_PAUSABLE
 	apply_settings()
@@ -181,6 +208,7 @@ func start_run() -> void:
 	state = PLAY
 	paused = false
 	get_tree().paused = false
+	hit_stop = 0.0
 	game.start()
 	ui.start_hud()
 	capture_mouse()
@@ -211,6 +239,8 @@ func finish_run(victory: bool) -> void:
 		save_settings()
 	release_mouse()
 	ui.show_end(victory, new_record)
+	if bot_mode and bot_once:
+		get_tree().quit()
 
 func quit_game() -> void:
 	save_settings()
@@ -228,6 +258,9 @@ func _unhandled_input(ev: InputEvent) -> void:
 func _process(dt: float) -> void:
 	if state == PLAY:
 		if get_tree().paused:
+			return
+		if hit_stop > 0.0:
+			hit_stop -= dt / maxf(0.05, Engine.time_scale)
 			return
 		if bot_mode:
 			bot.update(dt)

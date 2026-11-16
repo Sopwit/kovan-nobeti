@@ -125,33 +125,37 @@ func update(dt: float) -> void:
 	var pl = main.player
 	var en = main.enemies
 	var p: Vector3 = pl.pos
+	# with the queen in reach, part of every volley goes for her instead of the nearest bug
+	var boss: int = en.boss_index()
+	if boss >= 0 and Vector2(en.px[boss] - p.x, en.pz[boss] - p.z).length() > 20.0:
+		boss = -1
 	# --- bees
 	var l: int = levels.ari
 	if l > 0:
 		timers.ari -= dt
 		if timers.ari <= 0.0:
-			var n := 1 + b(l >= 2) + b(l >= 4) + 2 * b(l >= 6) + extra_proj
+			var n := 1 + b(l >= 2) + b(l >= 4) + 2 * b(l >= 6) + 3 * b(l >= 7) + extra_proj
 			var skip := {}
 			var fired := false
 			for k in n:
-				var t: int = en.nearest(p.x, p.z, 17.0, skip)
+				var t: int = boss if (boss >= 0 and k % 2 == 0) else en.nearest(p.x, p.z, 12.5, skip)
 				if t < 0 and k > 0:
-					t = en.nearest(p.x, p.z, 17.0)
+					t = en.nearest(p.x, p.z, 12.5)
 				if t < 0:
 					break
 				skip[en.uid[t]] = true
-				_fire_bee(p, t, 9.0 + 5.0 * b(l >= 3) + 7.0 * b(l >= 6), b(l >= 4) + b(l >= 6), k, n)
+				_fire_bee(p, t, 10.0 + 5.0 * b(l >= 3) + 7.0 * b(l >= 6) + 10.0 * b(l >= 7), b(l >= 4) + b(l >= 6) + 2 * b(l >= 7), k, n)
 				fired = true
 			if fired:
 				main.audio.play("shoot", -6.0, randf_range(0.9, 1.2))
-				timers.ari = 0.85 * (0.72 if l >= 5 else 1.0) * cd_mult
+				timers.ari = 0.62 * (0.72 if l >= 5 else 1.0) * cd_mult
 			else:
 				timers.ari = 0.15
 	_update_bees(dt)
 	# --- smoke aura
 	l = levels.tutsu
 	if l > 0:
-		var r := 3.1 * (1.0 + 0.22 * b(l >= 2) + 0.25 * b(l >= 5)) * area_mult
+		var r := 3.1 * (1.0 + 0.22 * b(l >= 2) + 0.25 * b(l >= 5) + 0.45 * b(l >= 7)) * area_mult
 		aura.visible = true
 		aura.position = Vector3(p.x, 0.12, p.z)
 		aura.scale = Vector3(r, 1, r)
@@ -161,7 +165,7 @@ func update(dt: float) -> void:
 		if timers.tutsu <= 0.0:
 			timers.tutsu = (0.45 if l < 6 else 0.33) * maxf(0.5, cd_mult)
 			aura_pulse = 1.0
-			var d := 4.0 + 3.0 * b(l >= 3) + 6.0 * b(l >= 6)
+			var d := 4.0 + 3.0 * b(l >= 3) + 6.0 * b(l >= 6) + 10.0 * b(l >= 7)
 			for i in en.query(p.x, p.z, r):
 				if p.y < 2.5 or en.height_of(i) > 0.5:
 					deal(i, d, 0.0, 0.0, "tutsu")
@@ -172,25 +176,25 @@ func update(dt: float) -> void:
 	if l > 0:
 		timers.bomba -= dt
 		if timers.bomba <= 0.0:
-			var nb := 1 + b(l >= 3) + b(l >= 6) + extra_proj
+			var nb := 1 + b(l >= 3) + b(l >= 6) + 2 * b(l >= 7) + extra_proj
 			var any := false
 			for k in nb:
-				var t2: int = en.random_near(p.x, p.z, 15.0)
+				var t2: int = boss if (boss >= 0 and k == 0) else en.random_near(p.x, p.z, 12.5)
 				if t2 < 0:
 					break
 				any = true
 				bombs.append({"from": p + Vector3(0, 1.4, 0), "to": Vector3(en.px[t2], 0, en.pz[t2]), "t": -0.08 * k,
-					"dmg": 28.0 + 12.0 * b(l >= 2) + 22.0 * b(l >= 6), "r": 3.3 * (1.3 if l >= 4 else 1.0) * area_mult})
+					"dmg": 28.0 + 12.0 * b(l >= 2) + 22.0 * b(l >= 6) + 30.0 * b(l >= 7), "r": 3.3 * (1.3 if l >= 4 else 1.0) * (1.25 if l >= 7 else 1.0) * area_mult})
 			timers.bomba = (3.2 * (0.75 if l >= 5 else 1.0) * cd_mult) if any else 0.3
 	_update_bombs(dt)
 	# --- orbiting stingers
 	l = levels.igne
 	var n_orb := 0
 	if l > 0:
-		n_orb = mini(orbit_nodes.size(), 2 + b(l >= 2) + b(l >= 4) + 2 * b(l >= 6) + extra_proj)
+		n_orb = mini(orbit_nodes.size(), 2 + b(l >= 2) + b(l >= 4) + 2 * b(l >= 6) + 4 * b(l >= 7) + extra_proj)
 		var orr := 2.7 * (1.25 if l >= 5 else 1.0) * (0.6 + 0.4 * area_mult)
-		orbit_angle += dt * (3.4 if l < 4 else 4.4)
-		var od := 8.0 + 5.0 * b(l >= 3) + 9.0 * b(l >= 6)
+		orbit_angle += dt * (3.4 if l < 4 else (4.4 if l < 7 else 5.6))
+		var od := 8.0 + 5.0 * b(l >= 3) + 9.0 * b(l >= 6) + 14.0 * b(l >= 7)
 		for k in n_orb:
 			var a := orbit_angle + TAU * k / n_orb
 			var ox := p.x + cos(a) * orr
@@ -213,11 +217,11 @@ func update(dt: float) -> void:
 			var strikes := 1 + b(l >= 6)
 			var hit_any := false
 			for s in strikes:
-				if _chain(p, 16.0 + 8.0 * b(l >= 3) + 14.0 * b(l >= 6), 3 + 2 * b(l >= 2) + 3 * b(l >= 5) + extra_proj):
+				if _chain(p, 16.0 + 8.0 * b(l >= 3) + 14.0 * b(l >= 6) + 20.0 * b(l >= 7), 3 + 2 * b(l >= 2) + 3 * b(l >= 5) + 6 * b(l >= 7) + extra_proj, boss if s == 0 else -1):
 					hit_any = true
 			if hit_any:
 				main.audio.play("zap", -4.0, randf_range(0.9, 1.15))
-				timers.kivilcim = 2.2 * (0.8 if l >= 4 else 1.0) * cd_mult
+				timers.kivilcim = 2.2 * (0.8 if l >= 4 else 1.0) * (0.6 if l >= 7 else 1.0) * cd_mult
 			else:
 				timers.kivilcim = 0.2
 	for k in bolt_nodes.size():
@@ -337,6 +341,19 @@ func explode(at: Vector3, r: float, d: float, src: String) -> void:
 	main.fx.shake(0.3)
 	main.audio.play("explosion", -5.0, randf_range(0.9, 1.1))
 
+# Shoves the crowd away without hurting it: used when play resumes after an upgrade choice.
+func push_back(at: Vector3, r: float, force: float, show := true) -> void:
+	var en = main.enemies
+	for i in en.query(at.x, at.z, r):
+		var dx: float = en.px[i] - at.x
+		var dz: float = en.pz[i] - at.z
+		var l := sqrt(dx * dx + dz * dz) + 0.01
+		var kb: float = en.TYPES[en.typ[i]].kb
+		en.vx[i] += dx / l * force * kb
+		en.vz[i] += dz / l * force * kb
+	if show:
+		main.fx.explosion(at, r, Color(1.0, 0.9, 0.5))
+
 func stomp(at: Vector3, lv: int) -> void:
 	var r := (3.0 + 0.7 * lv) * area_mult
 	var en = main.enemies
@@ -351,9 +368,9 @@ func stomp(at: Vector3, lv: int) -> void:
 	main.fx.shake(0.25)
 	main.audio.play("boss_slam", -12.0, 1.5)
 
-func _chain(p: Vector3, d: float, jumps: int) -> bool:
+func _chain(p: Vector3, d: float, jumps: int, first := -1) -> bool:
 	var en = main.enemies
-	var t: int = en.random_near(p.x, p.z, 13.0)
+	var t: int = first if first >= 0 else en.random_near(p.x, p.z, 13.0)
 	if t < 0:
 		return false
 	var from := p + Vector3(0, 1.3, 0)

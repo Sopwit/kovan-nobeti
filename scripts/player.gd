@@ -24,7 +24,7 @@ var air_peak := 0.0
 
 # stats changed by upgrades
 var max_hp := 100.0
-var move_speed := 8.6
+var move_speed := 8.2
 var pickup_r := 3.2
 var armor := 0.0
 var regen := 0.0
@@ -33,8 +33,8 @@ var slide_lv := 0
 
 # camera
 var cam_yaw := 0.0
-var cam_pitch := -0.46
-var cam_dist := 8.0
+var cam_pitch := -0.6
+var cam_dist := 9.5
 var look_shift := 0.0
 var cam: Camera3D
 var model: Node3D
@@ -80,7 +80,7 @@ func reset() -> void:
 	vel = Vector3.ZERO
 	hp = 100.0
 	max_hp = 100.0
-	move_speed = 8.6
+	move_speed = 8.2
 	pickup_r = 3.2
 	armor = 0.0
 	regen = 0.0
@@ -94,8 +94,8 @@ func reset() -> void:
 	model.rotation = Vector3.ZERO
 	model.visible = true
 	cam_yaw = 0.0
-	cam_pitch = -0.46
-	cam_dist = 8.0
+	cam_pitch = -0.6
+	cam_dist = 9.5
 	look_shift = 0.0
 	facing = 0.0
 	model_tilt = 0.0
@@ -133,7 +133,9 @@ func hurt(amount: float, fx: float, fz: float) -> bool:
 		return false
 	var a := maxf(1.0, amount - armor)
 	hp -= a
-	inv_t = 0.45
+	inv_t = 0.6
+	# a hit buys a moment of room instead of starting a chain of hits
+	main.weapons.push_back(pos, 3.6, 10.0, false)
 	main.game.stats.taken += a
 	main.fx.shake(0.45)
 	main.fx.hurt_flash()

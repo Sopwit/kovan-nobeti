@@ -25,6 +25,7 @@ func setup(m) -> void:
 	var pmat := StandardMaterial3D.new()
 	pmat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	pmat.vertex_color_use_as_albedo = true
+	pmat.vertex_color_is_srgb = true
 	pm.material = pmat
 	for k in 14:
 		var p := _make_particles(pm, 14, 0.5)

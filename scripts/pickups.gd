@@ -67,6 +67,14 @@ func drop_item(kind: String, at: Vector3) -> void:
 		m.emission_energy_multiplier = 0.6
 		mi.material_override = m
 		mi.scale = Vector3.ONE * 1.2
+	elif kind == "heal":
+		mi.mesh = main.assets.prop_mesh("kavanoz")
+		var mh: StandardMaterial3D = main.assets.prop_material("kavanoz")
+		mh.emission_enabled = true
+		mh.emission = Color(1.0, 0.4, 0.5)
+		mh.emission_energy_multiplier = 0.5
+		mi.material_override = mh
+		mi.scale = Vector3.ONE * 0.75
 	else:
 		var tm := TorusMesh.new()
 		tm.inner_radius = 0.3
@@ -84,6 +92,13 @@ func drop_item(kind: String, at: Vector3) -> void:
 	mi.position = Vector3(at.x, 0.5, at.z)
 	add_child(mi)
 	items.append({"node": mi, "kind": kind, "pos": Vector3(at.x, 0, at.z)})
+
+func count_of(kind: String) -> int:
+	var n := 0
+	for it in items:
+		if it.kind == kind:
+			n += 1
+	return n
 
 func pull_all() -> void:
 	for i in gn:
@@ -141,9 +156,14 @@ func update(dt: float) -> void:
 	for it in items:
 		it.node.rotation.y += dt * 2.0
 		it.node.position.y = 0.55 + sin(time * 3.0) * 0.15
-		if Vector2(px - it.pos.x, pz - it.pos.z).length() < 1.8:
+		# a dropped jar waits on the ground while health is full
+		if Vector2(px - it.pos.x, pz - it.pos.z).length() < 1.8 and (it.kind != "heal" or pl.hp < pl.max_hp):
 			it.node.queue_free()
-			if it.kind == "chest":
+			if it.kind == "heal":
+				pl.heal(12.0)
+				main.audio.play("heal", -3.0, 1.25)
+				main.fx.burst(it.pos + Vector3(0, 1, 0), Color(1.0, 0.45, 0.55), 12, 5.0)
+			elif it.kind == "chest":
 				main.audio.play("chest")
 				main.fx.burst(it.pos + Vector3(0, 1, 0), Color(1.0, 0.85, 0.2), 24, 8.0)
 				main.game.open_chest()

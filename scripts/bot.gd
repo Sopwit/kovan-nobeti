@@ -1,9 +1,11 @@
 extends RefCounted
 # Demo bot used for testing: it steers the player, jumps and slides. It cannot be enabled from inside the game.
 
+const DIRS := 16
+
 var main
-var wander := Vector2(1, 0)
-var wander_t := 0.0
+var last_dir := Vector2(1, 0)
+var think_t := 0.0
 
 func setup(m) -> void:
 	main = m
@@ -22,6 +24,8 @@ func _goal(p: Vector2) -> Variant:
 		if best != null:
 			return best
 	for it in main.pickups.items:
+		if it.kind == "heal" and pl.hp >= pl.max_hp:
+			continue
 		var d2 := p.distance_to(Vector2(it.pos.x, it.pos.z))
 		if d2 < 25.0 and d2 < best_d:
 			best_d = d2
@@ -29,10 +33,10 @@ func _goal(p: Vector2) -> Variant:
 	if best != null:
 		return best
 	var pk = main.pickups
-	var n: int = mini(pk.gn, 120)
+	var n: int = mini(pk.gn, 200)
 	for i in n:
 		var d3 := p.distance_to(Vector2(pk.gx[i], pk.gz[i]))
-		if d3 < 9.0 and d3 < best_d:
+		if d3 < 13.0 and d3 < best_d:
 			best_d = d3
 			best = Vector2(pk.gx[i], pk.gz[i])
 	if best != null:
@@ -55,34 +59,70 @@ func update(dt: float) -> void:
 	var pl = main.player
 	var en = main.enemies
 	var p := Vector2(pl.pos.x, pl.pos.z)
-	var move := Vector2.ZERO
+	var near: PackedInt32Array = en.query(p.x, p.y, 16.0)
 	var close := 0
-	for i in en.query(p.x, p.y, 7.0):
-		var d := Vector2(p.x - en.px[i], p.y - en.pz[i])
-		var l: float = maxf(0.3, d.length() - en.rad[i])
-		var w := 1.8 / l
-		if en.typ[i] == en.T_BOSS:
-			w *= 3.0
-		move += d.normalized() * w
-		if l < 1.8:
+	for i in near:
+		if p.distance_to(Vector2(en.px[i], en.pz[i])) - en.rad[i] < 1.8:
 			close += 1
-	var goal = _goal(p)
-	if goal != null:
-		var to: Vector2 = goal - p
-		if to.length() > 0.6:
-			move += to.normalized() * 1.1
-	if p.length() > main.world.ARENA_R - 9.0:
-		move -= p.normalized() * 2.0
-	wander_t -= dt
-	if wander_t <= 0.0:
-		wander_t = randf_range(1.0, 2.5)
-		wander = Vector2.from_angle(randf() * TAU)
-	move += wander * 0.25
-	pl.bot_move = move.normalized() if move.length() > 0.05 else Vector2.ZERO
+	think_t -= dt
+	if think_t <= 0.0:
+		think_t = 0.08
+		var goal = _goal(p)
+		var goal_dir := Vector2.ZERO
+		if goal != null and p.distance_to(goal) > 0.6:
+			goal_dir = (goal - p).normalized()
+		# the queen is fought by circling her inside weapon range
+		var bi: int = en.boss_index()
+		if bi >= 0 and pl.hp > pl.max_hp * 0.35:
+			var tb := Vector2(en.px[bi], en.pz[bi]) - p
+			var bd := tb.length()
+			if bd > 0.1:
+				var radial := tb / bd
+				goal_dir = (radial.orthogonal() + radial * clampf((bd - 9.0) / 4.0, -1.5, 1.5)).normalized() * 1.6
+		# score a ring of headings: stay out of the crowd first, then go where the goal is
+		var best_s := -1e9
+		var best_dir := Vector2.ZERO
+		for k in DIRS:
+			var dir := Vector2.from_angle(TAU * k / DIRS)
+			var q := p + dir * 3.0
+			var q0 := p + dir * 1.3
+			var danger := 0.0
+			var crowd := 0.0
+			for i in near:
+				var e := Vector2(en.px[i], en.pz[i])
+				var l: float = maxf(0.5, q.distance_to(e) - en.rad[i])
+				var l0: float = maxf(0.4, q0.distance_to(e) - en.rad[i])
+				var w := 1.0 / (l * l) + 0.6 / (l0 * l0)
+				if en.typ[i] == en.T_BOSS:
+					w *= 3.0
+				danger += w
+				# how much of the crowd lies ahead on this heading: keeps the bot kiting toward open ground
+				var to := e - p
+				var dl := maxf(1.0, to.length())
+				var c := dir.dot(to) / dl
+				if c > 0.0:
+					crowd += c * c / dl
+			var s := -danger * 3.0 - crowd * 0.55 + dir.dot(goal_dir) * 0.9 + dir.dot(last_dir) * 0.3
+			# the arena wall is where a crowd pins you: steer back toward the middle well before it
+			var far: float = (p + dir * 6.0).length() - (float(main.world.ARENA_R) - 20.0)
+			if far > 0.0:
+				s -= far * 0.5
+			if s > best_s:
+				best_s = s
+				best_dir = dir
+		last_dir = best_dir
+	pl.bot_move = last_dir
 	if pl.on_ground and close >= 2 and randf() < dt * 2.5:
 		pl.bot_jump = true
 	if close >= 4 and randf() < dt * 2.0:
 		pl.bot_slide = true
+	# spit is jumped over, like a player who sees it coming
+	if pl.on_ground:
+		for bi in en.bcount:
+			var bd := Vector2(en.bx[bi] - p.x, en.bz[bi] - p.y)
+			if bd.length() < 2.8 and bd.dot(Vector2(en.bvx[bi], en.bvz[bi])) < 0.0:
+				pl.bot_jump = true
+				break
 	for r in en.rings:
 		var rd: float = absf(p.distance_to(Vector2(r.x, r.z)) - r.r)
 		if rd < 2.2 and pl.on_ground:

@@ -11,11 +11,11 @@ const T_BOSS := 4
 
 # hp, speed, dmg, radius, xp, fly height, visual size, knockback factor
 const TYPES := [
-	{"key": "bocek", "hp": 9.0, "speed": 3.2, "dmg": 7.0, "radius": 0.55, "xp": 1, "fly": 0.0, "size": 1.25, "kb": 1.0},
-	{"key": "esekarisi", "hp": 6.0, "speed": 5.4, "dmg": 6.0, "radius": 0.5, "xp": 1, "fly": 1.25, "size": 1.2, "kb": 1.3},
-	{"key": "gergedan", "hp": 85.0, "speed": 2.3, "dmg": 16.0, "radius": 1.05, "xp": 6, "fly": 0.0, "size": 2.5, "kb": 0.25},
-	{"key": "tukuren", "hp": 24.0, "speed": 2.7, "dmg": 8.0, "radius": 0.7, "xp": 3, "fly": 0.0, "size": 1.6, "kb": 0.7},
-	{"key": "kralice", "hp": 9000.0, "speed": 4.6, "dmg": 26.0, "radius": 2.6, "xp": 0, "fly": 0.0, "size": 7.0, "kb": 0.0},
+	{"key": "bocek", "hp": 7.0, "speed": 4.5, "dmg": 6.0, "radius": 0.55, "xp": 1, "fly": 0.0, "size": 1.25, "kb": 1.0},
+	{"key": "esekarisi", "hp": 6.0, "speed": 6.4, "dmg": 5.0, "radius": 0.5, "xp": 1, "fly": 1.25, "size": 1.2, "kb": 1.3},
+	{"key": "gergedan", "hp": 60.0, "speed": 3.3, "dmg": 14.0, "radius": 1.0, "xp": 8, "fly": 0.0, "size": 2.1, "kb": 0.25},
+	{"key": "tukuren", "hp": 24.0, "speed": 3.4, "dmg": 7.0, "radius": 0.7, "xp": 3, "fly": 0.0, "size": 1.6, "kb": 0.7},
+	{"key": "kralice", "hp": 30000.0, "speed": 4.6, "dmg": 26.0, "radius": 2.6, "xp": 0, "fly": 0.0, "size": 7.0, "kb": 0.0},
 ]
 
 var main
@@ -38,6 +38,7 @@ var slow_t := PackedFloat32Array()
 var orb_cd := PackedFloat32Array()
 var timer := PackedFloat32Array()
 var phase := PackedFloat32Array()
+var born := PackedFloat32Array()
 var yaw := PackedFloat32Array()
 var scl := PackedFloat32Array()
 var typ := PackedInt32Array()
@@ -47,6 +48,8 @@ var dead := PackedByteArray()
 var nxt := PackedInt32Array()
 var head := {}
 var dead_any := false
+# bodies that were just killed: drawn squashing flat for a moment
+var dying: Array = []
 var sep_cursor := 0
 
 var mm: Array[MultiMesh] = []
@@ -78,7 +81,7 @@ var time := 0.0
 
 func setup(m) -> void:
 	main = m
-	for arr in [px, pz, vx, vz, sx, sz, hp, maxhp, rad, spd, dmg, flash, atk_cd, slow_t, orb_cd, timer, phase, yaw, scl]:
+	for arr in [px, pz, vx, vz, sx, sz, hp, maxhp, rad, spd, dmg, flash, atk_cd, slow_t, orb_cd, timer, phase, yaw, scl, born]:
 		arr.resize(MAXN)
 	typ.resize(MAXN)
 	uid.resize(MAXN)
@@ -162,6 +165,7 @@ func setup(m) -> void:
 func clear() -> void:
 	count = 0
 	bcount = 0
+	dying.clear()
 	boss_uid = -1
 	boss_state = 0
 	rings.clear()
@@ -194,13 +198,16 @@ func spawn(t: int, x: float, z: float, is_elite := false, hp_mult := 1.0) -> int
 	maxhp[i] = h
 	rad[i] = d.radius * s
 	spd[i] = d.speed * randf_range(0.9, 1.1) * (0.85 if is_elite else 1.0)
-	dmg[i] = d.dmg * (1.6 if is_elite else 1.0)
+	# the swarm bites a little harder every minute; the queen keeps her own numbers
+	var late: float = 1.0 if t == T_BOSS else 1.0 + 0.035 * main.game.time / 60.0
+	dmg[i] = d.dmg * (1.6 if is_elite else 1.0) * late
 	flash[i] = 0.0
 	atk_cd[i] = 0.3
 	slow_t[i] = 0.0
 	orb_cd[i] = 0.0
 	timer[i] = randf_range(1.0, 3.0)
 	phase[i] = randf() * TAU
+	born[i] = 0.5
 	yaw[i] = 0.0
 	scl[i] = d.size * s * randf_range(0.92, 1.08)
 	typ[i] = t
@@ -223,7 +230,7 @@ func _remove(i: int) -> void:
 		sx[i] = sx[l]; sz[i] = sz[l]; hp[i] = hp[l]; maxhp[i] = maxhp[l]
 		rad[i] = rad[l]; spd[i] = spd[l]; dmg[i] = dmg[l]; flash[i] = flash[l]
 		atk_cd[i] = atk_cd[l]; slow_t[i] = slow_t[l]; orb_cd[i] = orb_cd[l]
-		timer[i] = timer[l]; phase[i] = phase[l]; yaw[i] = yaw[l]; scl[i] = scl[l]
+		timer[i] = timer[l]; phase[i] = phase[l]; yaw[i] = yaw[l]; scl[i] = scl[l]; born[i] = born[l]
 		typ[i] = typ[l]; uid[i] = uid[l]; elite[i] = elite[l]; dead[i] = dead[l]
 	count = l
 
@@ -331,10 +338,14 @@ func hurt(i: int, amount: float, kx: float, kz: float, src: String, crit := fals
 	vx[i] += kx * kb
 	vz[i] += kz * kb
 	main.game.on_damage_dealt(amount, src)
+	if t == T_BOSS:
+		main.game.boss_taken += amount
 	main.fx.number(Vector3(px[i], height_of(i) + scl[i] * 0.7, pz[i]), amount, crit)
 	if hp[i] <= 0.0:
 		dead[i] = 1
 		dead_any = true
+		if dying.size() < 90:
+			dying.append([t, px[i], height_of(i), pz[i], yaw[i], scl[i], 0.16])
 		main.game.on_enemy_killed(t, Vector3(px[i], height_of(i), pz[i]), elite[i] == 1, scl[i])
 		if t == T_BOSS:
 			boss_uid = -1
@@ -423,6 +434,9 @@ func update(dt: float) -> void:
 			atk_cd[i] -= dt
 		if orb_cd[i] > 0.0:
 			orb_cd[i] -= dt
+		if born[i] > 0.0:
+			born[i] -= dt
+			speed *= 0.4
 		var mvx := 0.0
 		var mvz := 0.0
 		if t == T_BOSS:
@@ -441,8 +455,8 @@ func update(dt: float) -> void:
 				mvx = -nz * speed * 0.6
 				mvz = nx * speed * 0.6
 			if timer[i] <= 0.0 and d < 16.0:
-				timer[i] = randf_range(2.4, 3.4)
-				fire_bullet(px[i] + nx * 0.6, pz[i] + nz * 0.6, nx, nz, 9.0, dmg[i])
+				timer[i] = randf_range(3.0, 4.2)
+				fire_bullet(px[i] + nx * 0.6, pz[i] + nz * 0.6, nx, nz, 9.0, TYPES[T_SPIT].dmg)
 				flash[i] = 0.6
 		else:
 			var stop := rad[i] + 0.35
@@ -473,13 +487,18 @@ func update(dt: float) -> void:
 		var want := atan2(nx, nz)
 		yaw[i] = lerp_angle(yaw[i], want, minf(1.0, dt * 8.0))
 		# contact damage
-		if t != T_BOSS and d < rad[i] + 0.55 and atk_cd[i] <= 0.0:
+		if t != T_BOSS and d < rad[i] + 0.55 and atk_cd[i] <= 0.0 and born[i] <= 0.0:
 			var fly: float = TYPES[t].fly
 			var reach := ply < 1.15 if fly == 0.0 else ply < 2.6
 			if reach and pl.hurt(dmg[i], px[i], pz[i]):
 				atk_cd[i] = 0.75
+				main.game.note_hit(TYPES[t].key)
 		# draw
 		var s := scl[i] * (1.0 + flash[i] * 0.18)
+		if born[i] > 0.0:
+			# newcomers grow out of the ground
+			var g := 1.0 - born[i] * 2.0
+			s *= 0.15 + 0.85 * (1.0 - (1.0 - g) * (1.0 - g))
 		var yy := 0.0
 		var roll := 0.0
 		if t == T_WASP:
@@ -498,6 +517,8 @@ func update(dt: float) -> void:
 			bas = bas * Basis(Vector3(0, 0, 1), roll)
 		var k2: int = tcount[t]
 		var m2 := mm[t]
+		if k2 >= m2.instance_count:
+			continue
 		m2.set_instance_transform(k2, Transform3D(bas, Vector3(px[i], yy, pz[i])))
 		m2.set_instance_custom_data(k2, Color(flash[i], 0.0, 0.0, 0.0))
 		if elite[i] == 1:
@@ -507,6 +528,27 @@ func update(dt: float) -> void:
 		else:
 			m2.set_instance_color(k2, Color.WHITE)
 		tcount[t] = k2 + 1
+	var keep_dying: Array = []
+	for dd in dying:
+		dd[6] -= dt
+		if dd[6] <= 0.0:
+			continue
+		keep_dying.append(dd)
+		var dt_type: int = dd[0]
+		var k3: int = tcount[dt_type]
+		if k3 >= mm[dt_type].instance_count:
+			continue
+		var f: float = 1.0 - float(dd[6]) / 0.16
+		var ds: float = dd[5]
+		var wide := ds * (1.0 + 0.5 * f)
+		var tall := ds * (1.0 - 0.9 * f)
+		var dyaw: float = dd[4]
+		var dbas := Basis(Vector3(cos(dyaw), 0, -sin(dyaw)) * wide, Vector3(0, tall, 0), Vector3(sin(dyaw), 0, cos(dyaw)) * wide)
+		mm[dt_type].set_instance_transform(k3, Transform3D(dbas, Vector3(dd[1], dd[2], dd[3])))
+		mm[dt_type].set_instance_custom_data(k3, Color(1.0, 0.0, 0.0, 0.0))
+		mm[dt_type].set_instance_color(k3, Color.WHITE)
+		tcount[dt_type] = k3 + 1
+	dying = keep_dying
 	for t in mm.size():
 		mm[t].visible_instance_count = tcount[t]
 	_update_bullets(dt, plx, plz, ply)
@@ -522,9 +564,10 @@ func _update_bullets(dt: float, plx: float, plz: float, ply: float) -> void:
 		var dx := bx[i] - plx
 		var dz := bz[i] - plz
 		var gone := blife[i] <= 0.0
-		if not gone and dx * dx + dz * dz < 0.75 and ply < 1.6:
+		if not gone and dx * dx + dz * dz < 0.75 and ply < 1.0:
 			if pl.hurt(bdmg[i], bx[i], bz[i]):
 				gone = true
+				main.game.note_hit("mermi")
 		if gone:
 			var l := bcount - 1
 			bx[i] = bx[l]; bz[i] = bz[l]; bvx[i] = bvx[l]; bvz[i] = bvz[l]
@@ -556,6 +599,7 @@ func _update_rings(dt: float, plx: float, plz: float, ply: float) -> void:
 			if not r.hit and absf(d - r.r) < 0.7 and ply < 0.75:
 				if main.player.hurt(r.dmg, r.x, r.z):
 					r.hit = true
+					main.game.note_hit("halka")
 	rings = keep
 
 func _boss_y() -> float:
@@ -656,3 +700,4 @@ func _boss_touch(i: int, d: float) -> void:
 	if d < rad[i] + 0.7 and atk_cd[i] <= 0.0 and main.player.pos.y < 3.0:
 		if main.player.hurt(dmg[i], px[i], pz[i]):
 			atk_cd[i] = 0.8
+			main.game.note_hit("kralice")

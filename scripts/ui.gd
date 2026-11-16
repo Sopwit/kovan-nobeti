@@ -35,6 +35,7 @@ var toast_t := 0.0
 var icons := {}
 var sliders := {}
 var hint_t := 0.0
+var hold_choice := false
 
 func setup(m) -> void:
 	main = m
@@ -337,8 +338,26 @@ func _build_choice() -> void:
 		box.add_theme_constant_override("separation", 10)
 		box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		b.add_child(box)
+		var top := HBoxContainer.new()
+		top.custom_minimum_size = Vector2(0, 48)
+		top.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		box.add_child(top)
 		var key := _label(str(i + 1), 26, Color(0.6, 0.66, 0.85))
-		box.add_child(key)
+		key.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		top.add_child(key)
+		# the evolution partner of this card: a trait for a weapon, a weapon for a trait
+		var pair := HBoxContainer.new()
+		pair.add_theme_constant_override("separation", 8)
+		pair.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		top.add_child(pair)
+		var pair_l := _label("Evrim", 20, Color(0.7, 0.75, 0.92), false)
+		pair.add_child(pair_l)
+		var pair_icon := TextureRect.new()
+		pair_icon.custom_minimum_size = Vector2(46, 46)
+		pair_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		pair_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		pair_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		pair.add_child(pair_icon)
 		var icon := TextureRect.new()
 		icon.custom_minimum_size = Vector2(170, 170)
 		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
@@ -356,7 +375,7 @@ func _build_choice() -> void:
 		ds.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		ds.size_flags_vertical = Control.SIZE_EXPAND_FILL
 		box.add_child(ds)
-		cards.append({"button": b, "icon": icon, "name": nm, "level": lv, "desc": ds})
+		cards.append({"button": b, "icon": icon, "name": nm, "level": lv, "desc": ds, "pair": pair, "pair_icon": pair_icon})
 
 func show_choice(kind: String, list: Array) -> void:
 	choosing = true
@@ -370,8 +389,17 @@ func show_choice(kind: String, list: Array) -> void:
 		var l: int = main.game.level_of(u.id)
 		c.icon.texture = icons.get(u.icon)
 		c.name.text = u.name
+		var partner: String = "" if (u.id == "sifa" or u.kind == "e") else main.game.evo_partner(u.id)
+		c.pair.visible = partner != ""
+		if partner != "":
+			c.pair_icon.texture = icons.get(main.game.upg(partner).icon)
+			var ready: bool = main.game.evo_ready(u.id if u.kind == "w" else partner)
+			c.pair.modulate.a = 1.0 if ready else 0.5
 		if u.id == "sifa":
 			c.level.text = ""
+			c.desc.text = u.desc
+		elif u.kind == "e":
+			c.level.text = "EVRİM"
 			c.desc.text = u.desc
 		elif u.kind == "w":
 			c.level.text = "YENİ SİLAH" if l == 0 else "Silah, seviye %d" % (l + 1)
@@ -379,7 +407,8 @@ func show_choice(kind: String, list: Array) -> void:
 		else:
 			c.level.text = "Özellik, seviye %d" % (l + 1)
 			c.desc.text = u.desc
-		c.level.add_theme_color_override("font_color", AMBER if u.kind == "w" else TEAL)
+		c.level.add_theme_color_override("font_color", TEAL if u.kind == "p" else AMBER)
+		c.name.add_theme_color_override("font_color", AMBER if u.kind == "e" else CREAM)
 	choice_panel.visible = true
 	choice_panel.modulate.a = 0.0
 	get_tree().paused = true
@@ -397,6 +426,9 @@ func _choose(i: int) -> void:
 	if main.game.queue.is_empty():
 		get_tree().paused = false
 		main.capture_mouse()
+		# play resumes with breathing room: the crowd is shoved back and the first hit is forgiven
+		main.weapons.push_back(main.player.pos, 6.5, 16.0)
+		main.player.inv_t = maxf(main.player.inv_t, 0.5)
 	else:
 		var kind: String = main.game.queue.pop_front()
 		show_choice(kind, main.game.choices())
@@ -499,11 +531,17 @@ func _process(dt: float) -> void:
 	if choosing:
 		choice_lock -= dt
 		choice_panel.modulate.a = minf(1.0, choice_panel.modulate.a + dt * 6.0)
-		if main.bot_mode:
+		if main.bot_mode and not hold_choice:
 			bot_t -= dt
 			if bot_t <= 0.0:
 				choice_lock = 0.0
-				_choose(randi() % 3)
+				# the bot plays like a sensible player: evolutions first, then weapons, else anything
+				var pick := randi() % 3
+				for want in (["w", "e"] if randf() < 0.6 else ["e"]):
+					for ci in 3:
+						if card_data[ci].kind == want and card_data[ci].id != "sifa":
+							pick = ci
+				_choose(pick)
 	if toast_t > 0.0:
 		toast_t -= dt
 	hint_t -= dt
@@ -577,10 +615,10 @@ func _draw_hud() -> void:
 		var u: Dictionary = g.upg(id)
 		var r := Rect2(x, H - 96, 72, 72)
 		hud.draw_rect(r.grow(4), Color(0.05, 0.07, 0.15, 0.85))
-		hud.draw_rect(r.grow(4), AMBER, false, 2.0)
+		hud.draw_rect(r.grow(4), CREAM if l >= 7 else AMBER, false, 4.0 if l >= 7 else 2.0)
 		if icons.get(u.icon) != null:
 			hud.draw_texture_rect(icons[u.icon], r, false)
-		_text(hud, Vector2(x + 46, H - 22), str(l), 24, AMBER)
+		_text(hud, Vector2(x + 46, H - 22), str(l), 24, CREAM if l >= 7 else AMBER)
 		x += 88.0
 	x = 24.0
 	for id in g.passives:
@@ -621,7 +659,7 @@ func _draw_minimap(W: float) -> void:
 		if not j.taken:
 			hud.draw_circle(c + Vector2(j.pos.x, j.pos.z) * sc, 3.5, Color(1.0, 0.45, 0.5))
 	for it in main.pickups.items:
-		hud.draw_circle(c + Vector2(it.pos.x, it.pos.z) * sc, 5.0, AMBER if it.kind == "chest" else Color(0.3, 0.8, 1.0))
+		hud.draw_circle(c + Vector2(it.pos.x, it.pos.z) * sc, 5.0, AMBER if it.kind == "chest" else (Color(1.0, 0.45, 0.5) if it.kind == "heal" else Color(0.3, 0.8, 1.0)))
 	var en = main.enemies
 	for i in en.count:
 		if en.dead[i] == 0 and (en.elite[i] == 1 or en.typ[i] == en.T_BOSS):

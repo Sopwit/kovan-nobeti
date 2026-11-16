@@ -41,7 +41,7 @@ func _build_environment() -> void:
 	env.sky = sky
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	env.ambient_light_color = Color(0.78, 0.86, 1.0)
-	env.ambient_light_energy = 0.38
+	env.ambient_light_energy = 0.5
 	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 	env.tonemap_white = 1.6
 	env.glow_enabled = true
@@ -61,7 +61,7 @@ func _build_environment() -> void:
 	var sun := DirectionalLight3D.new()
 	sun.rotation_degrees = Vector3(-52, 38, 0)
 	sun.light_color = Color(1.0, 0.96, 0.86)
-	sun.light_energy = 0.85
+	sun.light_energy = 1.1
 	sun.shadow_enabled = true
 	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
 	sun.directional_shadow_max_distance = 60.0
@@ -94,7 +94,7 @@ void fragment() {
 	col *= 0.93 + 0.12 * big;
 	float r = length(wp.xz);
 	col = mix(col, vec3(0.27, 0.48, 0.19), smoothstep(arena - 3.0, arena + 4.0, r));
-	ALBEDO = col;
+	ALBEDO = pow(col, vec3(2.2));
 	ROUGHNESS = 0.95;
 }
 """
@@ -139,7 +139,7 @@ func _free_spot(rmin: float, rmax: float, clearance: float) -> Vector2:
 
 func _build_scenery() -> void:
 	var tree_mesh: Mesh = main.assets.prop_mesh("agac")
-	var tree_mat: Material = main.assets.prop_material("agac")
+	var tree_mat: Material = main.assets.prop_material("agac", true)
 	var xfs: Array = []
 	# a thick ring of trees closes the meadow
 	for i in 170:
@@ -156,13 +156,13 @@ func _build_scenery() -> void:
 	_mm(tree_mesh, tree_mat, xfs)
 	# decorative hives
 	var hive_mesh: Mesh = main.assets.prop_mesh("kovan")
-	var hive_mat: Material = main.assets.prop_material("kovan")
+	var deco_hive_mat: Material = main.assets.prop_material("kovan", true)
 	xfs = []
 	for i in 9:
 		var p2 := _free_spot(9.0, ARENA_R - 8.0, 5.0)
 		xfs.append(Transform3D(Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(2.6, 2.6, 2.6)), Vector3(p2.x, 0, p2.y)))
 		obstacles.append(Vector3(p2.x, p2.y, 1.1))
-	_mm(hive_mesh, hive_mat, xfs)
+	_mm(hive_mesh, deco_hive_mat, xfs)
 	# rocks
 	var rock := SphereMesh.new()
 	rock.radius = 1.0
@@ -172,6 +172,9 @@ func _build_scenery() -> void:
 	var rmat := StandardMaterial3D.new()
 	rmat.albedo_color = Color(0.58, 0.58, 0.62)
 	rmat.roughness = 0.95
+	rmat.distance_fade_mode = BaseMaterial3D.DISTANCE_FADE_PIXEL_DITHER
+	rmat.distance_fade_min_distance = 2.0
+	rmat.distance_fade_max_distance = 6.0
 	xfs = []
 	for i in 34:
 		var p3 := _free_spot(8.0, ARENA_R - 3.0, 3.0)
@@ -194,6 +197,7 @@ func _build_scenery() -> void:
 	stem.size = Vector3(0.03, 1.0, 0.03)
 	var fmat := StandardMaterial3D.new()
 	fmat.vertex_color_use_as_albedo = true
+	fmat.vertex_color_is_srgb = true
 	fmat.roughness = 0.9
 	var smat := StandardMaterial3D.new()
 	smat.albedo_color = Color(0.25, 0.5, 0.16)
@@ -222,6 +226,7 @@ func _build_scenery() -> void:
 	blade.size = Vector3(0.1, 0.42, 0.02)
 	var tmat := StandardMaterial3D.new()
 	tmat.vertex_color_use_as_albedo = true
+	tmat.vertex_color_is_srgb = true
 	tmat.cull_mode = BaseMaterial3D.CULL_DISABLED
 	tmat.roughness = 0.95
 	xfs = []
@@ -249,6 +254,7 @@ func _build_scenery() -> void:
 	hill.rings = 1
 	var hmat := StandardMaterial3D.new()
 	hmat.vertex_color_use_as_albedo = true
+	hmat.vertex_color_is_srgb = true
 	hmat.roughness = 1.0
 	xfs = []
 	cols = []
