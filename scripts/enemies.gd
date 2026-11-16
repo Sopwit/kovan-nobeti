@@ -455,7 +455,7 @@ func update(dt: float) -> void:
 				mvx = -nz * speed * 0.6
 				mvz = nx * speed * 0.6
 			if timer[i] <= 0.0 and d < 16.0:
-				timer[i] = randf_range(3.0, 4.2)
+				timer[i] = randf_range(3.4, 4.8)
 				fire_bullet(px[i] + nx * 0.6, pz[i] + nz * 0.6, nx, nz, 9.0, TYPES[T_SPIT].dmg)
 				flash[i] = 0.6
 		else:
@@ -675,6 +675,7 @@ func _boss_update(i: int, dt: float, nx: float, nz: float, d: float) -> Vector2:
 			if boss_t <= 0.0:
 				tele_node.visible = false
 				rings.append({"x": px[i], "z": pz[i], "r": 2.0, "speed": 13.0, "maxr": 42.0, "dmg": 22.0, "hit": false})
+				main.game.hint("ring", "Kırmızı halkanın üstünden zıpla")
 				main.fx.shake(0.8)
 				main.fx.burst(Vector3(px[i], 0.3, pz[i]), Color(1.0, 0.4, 0.3), 30, 9.0)
 				main.audio.play("boss_slam", 0.0, 1.0)

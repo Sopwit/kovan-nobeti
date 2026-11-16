@@ -45,8 +45,8 @@ void fragment() {
 	c = pow(c, vec3(grade));
 	float l = dot(c, vec3(0.3, 0.6, 0.1));
 	c = mix(vec3(l), c, 1.0 + (grade - 1.0) * 0.5) * COLOR.rgb;
-	ALBEDO = mix(c, vec3(1.0), fl * 0.8);
-	EMISSION = vec3(1.0, 0.9, 0.7) * fl * 1.2;
+	ALBEDO = mix(c, vec3(1.0), fl * 0.6);
+	EMISSION = vec3(1.0, 0.9, 0.7) * fl * 0.5;
 	ROUGHNESS = 0.8;
 }
 """
@@ -60,10 +60,10 @@ void fragment() {
 	float r = length(p);
 	float a = atan(p.y, p.x);
 	float swirl = sin(a * 6.0 + TIME * 1.6 + r * 5.0) * 0.5 + 0.5;
-	float ring = smoothstep(0.76, 0.95, r) * (1.0 - smoothstep(0.96, 1.0, r));
-	float fill = (1.0 - smoothstep(0.9, 1.0, r)) * 0.05;
-	ALBEDO = mix(vec3(0.95, 0.97, 0.9), vec3(1.0, 0.9, 0.55), pulse * 0.6);
-	ALPHA = clamp((ring * (0.10 + 0.18 * swirl) + fill * 0.5) * (1.0 + pulse * 0.7), 0.0, 0.5);
+	float ring = smoothstep(0.88, 0.96, r) * (1.0 - smoothstep(0.97, 1.0, r));
+	float wisp = smoothstep(0.45, 0.9, r) * (1.0 - smoothstep(0.9, 1.0, r)) * swirl;
+	ALBEDO = mix(vec3(0.86, 0.9, 0.82), vec3(1.0, 0.9, 0.55), pulse * 0.6);
+	ALPHA = clamp((ring * 0.3 + wisp * 0.07) * (1.0 + pulse * 0.6), 0.0, 0.45);
 }
 """
 	if ResourceLoader.exists("res://assets/tex/ikonlar.png"):

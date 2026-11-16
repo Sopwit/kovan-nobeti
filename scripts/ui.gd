@@ -36,6 +36,9 @@ var icons := {}
 var sliders := {}
 var hint_t := 0.0
 var hold_choice := false
+var choice_kind := ""
+var end_menu: Button
+var end_lock := 0.0
 
 func setup(m) -> void:
 	main = m
@@ -108,6 +111,8 @@ func _button(text: String, cb: Callable, primary := false) -> Button:
 	b.add_theme_color_override("font_hover_color", NAVY if primary else Color.WHITE)
 	b.add_theme_color_override("font_focus_color", NAVY if primary else Color.WHITE)
 	b.add_theme_color_override("font_pressed_color", NAVY if primary else Color.WHITE)
+	b.add_theme_stylebox_override("disabled", _style(base.darkened(0.35), base.darkened(0.1), 3, 16))
+	b.add_theme_color_override("font_disabled_color", Color(0.55, 0.55, 0.6))
 	b.pressed.connect(func():
 		main.audio.play("click")
 		cb.call())
@@ -321,7 +326,7 @@ func _build_choice() -> void:
 	v.add_child(h)
 	for i in 3:
 		var b := Button.new()
-		b.custom_minimum_size = Vector2(380, 470)
+		b.custom_minimum_size = Vector2(380, 510)
 		b.add_theme_stylebox_override("normal", _style(Color(0.08, 0.1, 0.2, 0.96), Color(0.3, 0.36, 0.6), 4, 22))
 		b.add_theme_stylebox_override("hover", _style(Color(0.13, 0.16, 0.3, 0.98), AMBER, 5, 22))
 		b.add_theme_stylebox_override("focus", _style(Color(0.13, 0.16, 0.3, 0.98), AMBER, 5, 22))
@@ -359,7 +364,7 @@ func _build_choice() -> void:
 		pair_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		pair.add_child(pair_icon)
 		var icon := TextureRect.new()
-		icon.custom_minimum_size = Vector2(170, 170)
+		icon.custom_minimum_size = Vector2(160, 160)
 		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -382,11 +387,14 @@ func show_choice(kind: String, list: Array) -> void:
 	choice_lock = 0.45
 	bot_t = 0.25
 	card_data = list
+	choice_kind = kind
 	choice_title.text = "SANDIK AÇILDI" if kind == "chest" else "SEVİYE %d" % main.game.level
 	for i in 3:
 		var u: Dictionary = list[i]
 		var c: Dictionary = cards[i]
 		var l: int = main.game.level_of(u.id)
+		# a chest applies the chosen upgrade twice
+		var twice := kind == "chest"
 		c.icon.texture = icons.get(u.icon)
 		c.name.text = u.name
 		var partner: String = "" if (u.id == "sifa" or u.kind == "e") else main.game.evo_partner(u.id)
@@ -404,9 +412,14 @@ func show_choice(kind: String, list: Array) -> void:
 		elif u.kind == "w":
 			c.level.text = "YENİ SİLAH" if l == 0 else "Silah, seviye %d" % (l + 1)
 			c.desc.text = u.desc[l]
+			if twice and l + 1 < u.max:
+				c.level.text = "YENİ SİLAH, seviye 2" if l == 0 else "Silah, seviye %d ve %d" % [l + 1, l + 2]
+				c.desc.text = "%s\n%s" % [u.desc[l], u.desc[l + 1]]
 		else:
 			c.level.text = "Özellik, seviye %d" % (l + 1)
 			c.desc.text = u.desc
+			if twice and l + 1 < u.max:
+				c.level.text = "Özellik, seviye %d ve %d" % [l + 1, l + 2]
 		c.level.add_theme_color_override("font_color", TEAL if u.kind == "p" else AMBER)
 		c.name.add_theme_color_override("font_color", AMBER if u.kind == "e" else CREAM)
 	choice_panel.visible = true
@@ -414,14 +427,20 @@ func show_choice(kind: String, list: Array) -> void:
 	get_tree().paused = true
 	main.audio.play("chest" if kind == "chest" else "levelup")
 	main.release_mouse()
-	cards[1].button.grab_focus()
+	# no card takes keyboard focus: a jump key held through the level-up must not pick one
+	var held := get_viewport().gui_get_focus_owner()
+	if held != null:
+		held.release_focus()
 
 func _choose(i: int) -> void:
 	if not choosing or choice_lock > 0.0:
 		return
 	choosing = false
 	main.audio.play("click")
-	main.game.apply(card_data[i].id)
+	var picked: Dictionary = card_data[i]
+	main.game.apply(picked.id)
+	if choice_kind == "chest" and picked.id != "sifa" and picked.kind != "e" and main.game.level_of(picked.id) < picked.max:
+		main.game.apply(picked.id)
 	choice_panel.visible = false
 	if main.game.queue.is_empty():
 		get_tree().paused = false
@@ -472,7 +491,8 @@ func _build_end() -> void:
 	v.add_child(bh)
 	end_again = _button("Bir tur daha", func(): main.start_run(), true)
 	bh.add_child(end_again)
-	bh.add_child(_button("Ana menü", func(): main.to_menu()))
+	end_menu = _button("Ana menü", func(): main.to_menu())
+	bh.add_child(end_menu)
 
 func _stat_row(parent: Container, name: String, value: String, col := CREAM) -> void:
 	var row := HBoxContainer.new()
@@ -523,7 +543,10 @@ func show_end(victory: bool, new_record: bool) -> void:
 		row.add_child(bar)
 		end_damage.add_child(row)
 	end_panel.visible = true
-	end_again.grab_focus()
+	# the buttons wake up a moment later, so keys still held from the fight cannot skip the screen
+	end_lock = 0.9
+	end_again.disabled = true
+	end_menu.disabled = true
 
 # ---------- per frame
 
@@ -542,6 +565,12 @@ func _process(dt: float) -> void:
 						if card_data[ci].kind == want and card_data[ci].id != "sifa":
 							pick = ci
 				_choose(pick)
+	if end_panel.visible and end_lock > 0.0:
+		end_lock -= dt
+		if end_lock <= 0.0:
+			end_again.disabled = false
+			end_menu.disabled = false
+			end_again.grab_focus()
 	if toast_t > 0.0:
 		toast_t -= dt
 	hint_t -= dt

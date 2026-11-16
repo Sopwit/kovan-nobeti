@@ -13,6 +13,7 @@ var facing := 0.0
 var on_ground := true
 var coyote := 0.0
 var jump_buf := 0.0
+var slide_buf := 0.0
 var slide_t := 0.0
 var slide_cd := 0.0
 var slide_dir := Vector3.ZERO
@@ -90,6 +91,8 @@ func reset() -> void:
 	inv_t = 1.0
 	slide_t = 0.0
 	slide_cd = 0.0
+	jump_buf = 0.0
+	slide_buf = 0.0
 	on_ground = true
 	model.rotation = Vector3.ZERO
 	model.visible = true
@@ -151,6 +154,15 @@ func hurt(amount: float, fx: float, fz: float) -> bool:
 		main.game.on_player_dead()
 	return true
 
+# Key presses that land on a frame the simulation skips (hit stop) are kept for the next one.
+func buffer_input() -> void:
+	if main.bot_mode:
+		return
+	if Input.is_action_just_pressed("jump"):
+		jump_buf = 0.14
+	if Input.is_action_just_pressed("slide"):
+		slide_buf = 0.14
+
 func heal(a: float) -> void:
 	hp = minf(max_hp, hp + a)
 
@@ -189,10 +201,14 @@ func update(dt: float) -> void:
 		wish = wish.normalized()
 	if want_jump:
 		jump_buf = 0.14
+	if want_slide:
+		slide_buf = 0.14
 	jump_buf -= dt
+	slide_buf -= dt
 	coyote = 0.12 if on_ground else coyote - dt
 	# slide
-	if want_slide and slide_cd <= 0.0 and slide_t <= 0.0 and on_ground:
+	if slide_buf > 0.0 and slide_cd <= 0.0 and slide_t <= 0.0 and on_ground:
+		slide_buf = 0.0
 		slide_t = SLIDE_TIME
 		slide_cd = 1.0 - 0.12 * slide_lv
 		slide_dir = wish.normalized() if wish.length() > 0.2 else Vector3(sin(facing), 0, cos(facing))

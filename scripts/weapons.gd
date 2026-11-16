@@ -134,7 +134,7 @@ func update(dt: float) -> void:
 	if l > 0:
 		timers.ari -= dt
 		if timers.ari <= 0.0:
-			var n := 1 + b(l >= 2) + b(l >= 4) + 2 * b(l >= 6) + 3 * b(l >= 7) + extra_proj
+			var n := 1 + b(l >= 2) + b(l >= 4) + 2 * b(l >= 6) + 2 * b(l >= 7) + extra_proj
 			var skip := {}
 			var fired := false
 			for k in n:
@@ -144,7 +144,7 @@ func update(dt: float) -> void:
 				if t < 0:
 					break
 				skip[en.uid[t]] = true
-				_fire_bee(p, t, 10.0 + 5.0 * b(l >= 3) + 7.0 * b(l >= 6) + 10.0 * b(l >= 7), b(l >= 4) + b(l >= 6) + 2 * b(l >= 7), k, n)
+				_fire_bee(p, t, 10.0 + 5.0 * b(l >= 3) + 7.0 * b(l >= 6) + 10.0 * b(l >= 7), b(l >= 4) + b(l >= 6) + b(l >= 7), k, n)
 				fired = true
 			if fired:
 				main.audio.play("shoot", -6.0, randf_range(0.9, 1.2))

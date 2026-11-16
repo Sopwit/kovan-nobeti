@@ -36,19 +36,30 @@ func setup(m) -> void:
 		p2.initial_velocity_max = 6.0
 		p2.color = Color(1.0, 0.95, 0.7)
 		hits.append(p2)
-	var sm := SphereMesh.new()
-	sm.radius = 1.0
-	sm.height = 1.2
-	sm.radial_segments = 20
-	sm.rings = 8
-	for k in 8:
+	# explosions are flat shockwaves on the ground: a bright rim that runs outward over a short flash
+	var sm := QuadMesh.new()
+	sm.size = Vector2(2, 2)
+	sm.orientation = PlaneMesh.FACE_Y
+	var boom_shader := Shader.new()
+	boom_shader.code = """
+shader_type spatial;
+render_mode unshaded, cull_disabled, depth_draw_never, shadows_disabled;
+uniform vec4 col : source_color = vec4(1.0);
+uniform float f = 0.0;
+void fragment() {
+	float r = length(UV * 2.0 - 1.0);
+	float rim = smoothstep(0.70, 0.90, r) * (1.0 - smoothstep(0.93, 1.0, r));
+	float flash = 1.0 - smoothstep(0.0, 0.95, r);
+	float fade = 1.0 - f;
+	ALBEDO = mix(col.rgb, vec3(1.0), 0.35 * fade);
+	ALPHA = clamp(rim * 0.85 * fade + flash * 0.4 * fade * fade, 0.0, 1.0);
+}
+"""
+	for k in 14:
 		var b := MeshInstance3D.new()
 		b.mesh = sm
-		var bm := StandardMaterial3D.new()
-		bm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-		bm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-		bm.albedo_color = Color(1, 0.7, 0.2, 0.6)
-		bm.cull_mode = BaseMaterial3D.CULL_DISABLED
+		var bm := ShaderMaterial.new()
+		bm.shader = boom_shader
 		b.material_override = bm
 		b.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		b.visible = false
@@ -135,9 +146,11 @@ func explosion(at: Vector3, r: float, col: Color) -> void:
 	boom_r[boom_i] = r
 	boom_i = (boom_i + 1) % booms.size()
 	b.visible = true
-	b.position = Vector3(at.x, 0.2, at.z)
-	b.scale = Vector3.ONE * 0.3
-	(b.material_override as StandardMaterial3D).albedo_color = Color(col.r, col.g, col.b, 0.7)
+	b.position = Vector3(at.x, 0.16, at.z)
+	b.scale = Vector3(r * 0.3, 1.0, r * 0.3)
+	var bmat := b.material_override as ShaderMaterial
+	bmat.set_shader_parameter("col", col)
+	bmat.set_shader_parameter("f", 0.0)
 	burst(at + Vector3(0, 0.4, 0), col, 20, 9.0)
 
 func update(dt: float) -> void:
@@ -149,9 +162,9 @@ func update(dt: float) -> void:
 			boom_t[k] -= dt
 			var f := 1.0 - boom_t[k] / 0.28
 			var b := booms[k]
-			b.scale = Vector3(boom_r[k], boom_r[k] * 0.45, boom_r[k]) * (0.3 + 0.7 * f)
-			var mat := b.material_override as StandardMaterial3D
-			mat.albedo_color.a = 0.7 * (1.0 - f)
+			var grow := boom_r[k] * (0.3 + 0.7 * sqrt(f))
+			b.scale = Vector3(grow, 1.0, grow)
+			(b.material_override as ShaderMaterial).set_shader_parameter("f", f)
 			if boom_t[k] <= 0.0:
 				b.visible = false
 	var keep: Array = []

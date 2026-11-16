@@ -26,7 +26,7 @@ const UPG := [
 ]
 # A weapon at its last level evolves once its partner trait is high enough: weapon id -> [trait id, trait level, name, text]
 const EVO := {
-	"ari": ["cogalt", 2, "Kraliyet Sürüsü", "+3 arı, +10 hasar, iki delme daha"],
+	"ari": ["cogalt", 2, "Kraliyet Sürüsü", "+2 arı, +10 hasar, bir delme daha"],
 	"tutsu": ["menzil", 3, "Kara Duman", "Halka %45 genişler, +10 hasar"],
 	"bomba": ["ofke", 3, "Bal Yağmuru", "+2 bomba, +30 hasar, patlama %25 genişler"],
 	"igne": ["cizme", 3, "Diken Fırtınası", "+4 iğne, +14 hasar, çark hızlanır"],
@@ -75,6 +75,7 @@ func start() -> void:
 	stats = {"taken": 0.0, "dealt": 0.0, "by": {}, "chests": 0, "shrines": 0}
 	spawn_acc = 3.0
 	hits = {}
+	hinted = {}
 	mark_dealt = -1.0
 	boss_taken = 0.0
 	boss_t = 0.0
@@ -131,20 +132,21 @@ func level_of(id: String) -> int:
 func choices() -> Array:
 	var pool: Array = []
 	var weights: Array = []
+	var evos: Array = []
 	for u in UPG:
 		var l := level_of(u.id)
 		if l >= u.max:
-			if u.kind == "w" and l == u.max and evo_ready(u.id):
+			# an earned evolution is always offered, never left to the draw
+			if u.kind == "w" and l == u.max and evo_ready(u.id) and evos.size() < 2:
 				var e: Array = EVO[u.id]
-				pool.append({"id": u.id, "name": e[2], "icon": u.icon, "max": u.max + 1, "kind": "e", "desc": e[3]})
-				weights.append(6.0)
+				evos.append({"id": u.id, "name": e[2], "icon": u.icon, "max": u.max + 1, "kind": "e", "desc": e[3]})
 			continue
 		pool.append(u)
 		if u.kind == "w":
 			weights.append(1.5 if l > 0 else 1.3)
 		else:
 			weights.append(1.0)
-	var out: Array = []
+	var out: Array = evos
 	while out.size() < 3 and not pool.is_empty():
 		var total := 0.0
 		for w in weights:
@@ -178,6 +180,12 @@ func apply(id: String) -> void:
 		main.player.heal(40.0)
 	elif main.weapons.levels.has(id):
 		main.weapons.levels[id] += 1
+		if main.weapons.levels[id] == upg(id).max + 1:
+			# an evolution is a moment: say its name and clear some room
+			main.ui.toast("EVRİM: %s" % EVO[id][2])
+			main.audio.play("shrine", 0.0, 1.2)
+			main.fx.shake(0.6)
+			main.weapons.explode(main.player.pos, 9.0, 60.0, id)
 	else:
 		passives[id] = passives.get(id, 0) + 1
 		if id == "kalp":
@@ -202,7 +210,9 @@ func _recalc() -> void:
 	xp_mult = 1.0 + 0.12 * passives.get("kitap", 0)
 
 func add_xp(v: int) -> void:
-	xp += int(ceil(v * xp_mult))
+	# a run that has fallen behind the usual pace earns more per pickup, so a slow start is not a lost run
+	var behind := (4.0 + time / 22.0) - float(level)
+	xp += int(ceil(v * xp_mult * (1.0 + clampf(behind * 0.12, 0.0, 1.0))))
 	while xp >= xp_need:
 		xp -= xp_need
 		level += 1
@@ -224,6 +234,11 @@ func shrine_done(at: Vector3) -> void:
 
 # who hurt the player, by source: only read by the bot telemetry
 var hits := {}
+# one-time hints, shown the first time each threat appears in a run
+var hinted := {}
+var prof := [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+var prof_max := [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+var prof_n := 0
 # damage total and clock a while before the boss: her health is sized from the damage the build really deals
 var mark_dealt := -1.0
 var mark_time := 0.0
@@ -233,6 +248,11 @@ const BOSS_PROBE := 10.0
 var boss_taken := 0.0
 var boss_t := 0.0
 var boss_sized := false
+
+func hint(key: String, text: String) -> void:
+	if not hinted.has(key):
+		hinted[key] = true
+		main.ui.toast(text)
 
 func note_hit(k: String) -> void:
 	hits[k] = hits.get(k, 0) + 1
@@ -290,8 +310,10 @@ func _win(at: Vector3) -> void:
 	main.fx.shake(1.0)
 	main.fx.explosion(at, 12.0, Color(1.0, 0.8, 0.2))
 	main.audio.play("victory")
-	# the swarm dies with its queen
+	# the swarm dies with its queen, and her attacks with her
 	var en = main.enemies
+	en.rings.clear()
+	en.bcount = 0
 	for i in en.count:
 		if en.dead[i] == 0:
 			en.dead[i] = 1
@@ -311,16 +333,36 @@ func update(dt: float) -> void:
 			return
 	else:
 		time += dt
-	main.player.update(dt)
-	main.enemies.update(dt)
-	main.weapons.update(dt)
-	main.pickups.update(dt)
-	main.world.update(dt)
-	main.fx.update(dt)
+	if main.bot_mode:
+		# per-system frame cost for the telemetry line
+		var order := [main.player, main.enemies, main.weapons, main.pickups, main.world, main.fx]
+		for k in order.size():
+			var t0 := Time.get_ticks_usec()
+			order[k].update(dt)
+			var us := float(Time.get_ticks_usec() - t0)
+			prof[k] += us
+			prof_max[k] = maxf(prof_max[k], us)
+		prof_n += 1
+	else:
+		main.player.update(dt)
+		main.enemies.update(dt)
+		main.weapons.update(dt)
+		main.pickups.update(dt)
+		main.world.update(dt)
+		main.fx.update(dt)
 	if main.bot_mode and time >= next_log:
 		# bot telemetry for balancing: one line per 30 s of game time
 		print("T t=%d lv=%d kills=%d (+%d) alive=%d hp=%d/%d dps=%d taken=%d fps=%d w=%s" % [int(time), level, kills, kills - last_kills, main.enemies.count, int(main.player.hp), int(main.player.max_hp), int((stats.dealt - last_dealt) / 30.0), int(stats.taken), int(Engine.get_frames_per_second()), str(main.weapons.levels.values())])
-		next_log += 30.0
+		next_log = (floor(time / 30.0) + 1.0) * 30.0
+		if prof_n > 0:
+			var line := "T ms avg/max"
+			var names := ["player", "enemies", "weapons", "pickups", "world", "fx"]
+			for k in names.size():
+				line += " %s=%.2f/%.1f" % [names[k], prof[k] / prof_n / 1000.0, prof_max[k] / 1000.0]
+			print(line)
+			prof = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+			prof_max = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+			prof_n = 0
 		last_dealt = stats.dealt
 		last_kills = kills
 	if not over:
@@ -346,7 +388,7 @@ func _ring_pos(dmin: float, dmax: float) -> Vector2:
 func _pick_type() -> int:
 	var en = main.enemies
 	var r := randf()
-	if time > 300.0 and r < minf(0.08, (time - 300.0) / 3000.0 + 0.03):
+	if time > 300.0 and r < minf(0.065, (time - 300.0) / 4000.0 + 0.03):
 		return en.T_SPIT
 	r = randf()
 	if time > 170.0 and r < minf(0.11, (time - 170.0) / 2500.0 + 0.04):
@@ -389,7 +431,10 @@ func _spawn(dt: float) -> void:
 		spawn_acc -= 1.0
 		n += 1
 		var p := _ring_pos(17.0, 27.0)
-		en.spawn(_pick_type(), p.x, p.y, false, hp_scale())
+		var st := _pick_type()
+		en.spawn(st, p.x, p.y, false, hp_scale())
+		if st == en.T_SPIT:
+			hint("spit", "Tüküren geldi, tükürüğün üstünden zıpla")
 	if en.count >= hard_cap:
 		spawn_acc = minf(spawn_acc, 1.0)
 	# stragglers far behind the player rejoin the ring around them

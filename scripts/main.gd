@@ -62,7 +62,8 @@ var debug_levels := 0:
 				game.level += 1
 				game.xp_need = game._need(game.level)
 				game.queue.append("level")
-# "choice" holds an upgrade panel open, "pause" opens the pause menu, "win" and "lose" end the run
+# "choice" holds an upgrade panel open ("chest" a chest one, "evo" one with an evolution),
+# "pause" opens the pause menu, "win" and "lose" end the run
 var debug_ui := "":
 	set(v):
 		debug_ui = v
@@ -71,6 +72,16 @@ var debug_ui := "":
 		if v == "choice":
 			ui.hold_choice = true
 			game.queue.append("level")
+		elif v == "chest":
+			ui.hold_choice = true
+			game.queue.append("chest")
+		elif v == "evo":
+			ui.hold_choice = true
+			weapons.levels.ari = 6
+			weapons.levels.bomba = 3
+			game.passives.cogalt = 2
+			game._recalc()
+			game.queue.append("chest")
 		elif v == "pause":
 			toggle_pause()
 		elif v == "win":
@@ -261,6 +272,7 @@ func _process(dt: float) -> void:
 			return
 		if hit_stop > 0.0:
 			hit_stop -= dt / maxf(0.05, Engine.time_scale)
+			player.buffer_input()
 			return
 		if bot_mode:
 			bot.update(dt)
