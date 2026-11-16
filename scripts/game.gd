@@ -635,6 +635,10 @@ func update(dt: float) -> void:
 			main.audio.music("gece")
 		if not queue.is_empty() and not main.ui.choosing:
 			pop_choice()
+		# the wall is where a crowd pins the keeper: say so the first time they drift out to it
+		var pp: Vector3 = main.player.pos
+		if time > 60.0 and Vector2(pp.x, pp.z).length() > main.world.ARENA_R - 9.0:
+			hint("duvar", "Arena kenarındasın, sürü seni duvara sıkıştırır: ortaya dön")
 
 func _ring_pos(dmin: float, dmax: float) -> Vector2:
 	var p: Vector3 = main.player.pos
