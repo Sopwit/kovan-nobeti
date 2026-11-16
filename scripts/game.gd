@@ -266,7 +266,7 @@ func on_enemy_killed(t: int, at: Vector3, elite: bool, s: float) -> void:
 	main.audio.play("kill", 0.0, randf_range(0.85, 1.2))
 	main.fx.burst(at + Vector3(0, 0.4, 0), KILL_COL[t], 8 + int(s * 3.0), 5.0 + s)
 	if t == main.enemies.T_BOSS:
-		main.hit_stop = 0.22
+		main.stop_for(0.22, true)
 		_win(at)
 		return
 	var v: int = main.enemies.TYPES[t].xp
@@ -275,11 +275,11 @@ func on_enemy_killed(t: int, at: Vector3, elite: bool, s: float) -> void:
 		main.pickups.drop_item("chest", at)
 		main.fx.shake(0.5)
 		main.fx.explosion(at, 4.0, KILL_COL[t])
-		main.hit_stop = 0.09
+		main.stop_for(0.09, true)
 	else:
 		if t == main.enemies.T_BRUTE:
 			main.fx.shake(0.36)
-			main.hit_stop = maxf(main.hit_stop, 0.045)
+			main.stop_for(0.045)
 		else:
 			main.fx.shake(0.2)
 		main.pickups.drop_gem(at, v)
@@ -301,6 +301,9 @@ func on_player_dead() -> void:
 	main.audio.play("defeat")
 
 func _win(at: Vector3) -> void:
+	# a keeper who is already down cannot win with a shot still in the air
+	if over:
+		return
 	if main.bot_mode:
 		print("T WIN t=%d lv=%d kills=%d hp=%d hits=%s w=%s p=%s" % [int(time), level, kills, int(main.player.hp), str(hits), str(main.weapons.levels.values()), str(passives)])
 	over = true

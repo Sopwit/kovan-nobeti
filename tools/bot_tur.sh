@@ -3,7 +3,7 @@
 # usage: tools/bot_tur.sh <runs> <speed> [extra game args]
 n=${1:-1}
 speed=${2:-8}
-shift 2 2>/dev/null
+if [ "$#" -ge 2 ]; then shift 2; else shift "$#"; fi
 i=1
 while [ "$i" -le "$n" ]; do
 	echo "== run $i"

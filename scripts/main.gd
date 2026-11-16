@@ -1,7 +1,10 @@
 extends Node
 # Root of the game: builds every system, owns the state (menu, run, pause, end) and the saved settings.
 
-const SAVE_PATH := "user://kovan_nobeti.cfg"
+# Plain JSON on purpose: it can only hold numbers, strings, arrays and dictionaries, so a tampered save
+# cannot make the engine build objects or load resources the way a ConfigFile can.
+const SAVE_PATH := "user://kovan_nobeti.json"
+const SETTING_RANGE := {"sens": [0.2, 3.0], "music": [0.0, 1.0], "sfx": [0.0, 1.0], "brightness": [0.6, 1.5]}
 
 const Assets := preload("res://scripts/assets.gd")
 const World := preload("res://scripts/world.gd")
@@ -36,6 +39,7 @@ var record := {"runs": 0, "best_time": 0.0, "best_kills": 0, "wins": 0}
 var menu_yaw := 0.0
 # real seconds the simulation stays frozen after a heavy kill
 var hit_stop := 0.0
+var hit_stop_cd := 0.0
 
 # test hooks: the demo bot plays by itself and never touches the saved record
 var bot_mode := false
@@ -44,9 +48,9 @@ var bot_once := false
 var debug_god := false
 var debug_speed := 1.0:
 	set(v):
-		debug_speed = v
+		debug_speed = clampf(v, 0.1, 20.0)
 		if state == PLAY and game != null and not game.over:
-			Engine.time_scale = v
+			Engine.time_scale = debug_speed
 var debug_time := -1.0:
 	set(v):
 		debug_time = v
@@ -58,15 +62,18 @@ var debug_levels := 0:
 	set(v):
 		debug_levels = v
 		if game != null and v > 0:
-			for i in v:
+			for i in mini(v, 200):
 				game.level += 1
 				game.xp_need = game._need(game.level)
 				game.queue.append("level")
 # "choice" holds an upgrade panel open ("chest" a chest one, "evo" one with an evolution),
-# "pause" opens the pause menu, "win" and "lose" end the run
+# "pause" opens the pause menu, "settings" the settings panel of the main menu, "win" and "lose" end the run
 var debug_ui := "":
 	set(v):
 		debug_ui = v
+		if v == "settings" and ui != null:
+			ui.open_settings()
+			return
 		if game == null or state != PLAY:
 			return
 		if v == "choice":
@@ -102,7 +109,9 @@ func _ready() -> void:
 	_load()
 	var want_time := -1.0
 	var want_levels := 0
-	for a in OS.get_cmdline_user_args():
+	# the test flags only exist in debug builds: an exported release ignores them
+	var args := OS.get_cmdline_user_args() if OS.is_debug_build() else PackedStringArray()
+	for a in args:
 		if a == "--bot":
 			bot_mode = true
 		elif a == "--once":
@@ -171,22 +180,38 @@ func _setup_input() -> void:
 			ev.physical_keycode = key
 			InputMap.action_add_event(action, ev)
 
+func _num(v) -> bool:
+	return (typeof(v) == TYPE_FLOAT or typeof(v) == TYPE_INT) and is_finite(float(v))
+
+# Every value read from disk is checked for type and range: a broken or edited save falls back to defaults.
 func _load() -> void:
-	var cf := ConfigFile.new()
-	if cf.load(SAVE_PATH) != OK:
+	var f := FileAccess.open(SAVE_PATH, FileAccess.READ)
+	if f == null or f.get_length() > 65536:
 		return
-	for k in settings:
-		settings[k] = float(cf.get_value("ayarlar", k, settings[k]))
-	for k in record:
-		record[k] = cf.get_value("rekor", k, record[k])
+	var data = JSON.parse_string(f.get_as_text())
+	if typeof(data) != TYPE_DICTIONARY:
+		return
+	var s = data.get("ayarlar")
+	if typeof(s) == TYPE_DICTIONARY:
+		for k in settings:
+			if _num(s.get(k)):
+				settings[k] = clampf(float(s[k]), SETTING_RANGE[k][0], SETTING_RANGE[k][1])
+	var r = data.get("rekor")
+	if typeof(r) == TYPE_DICTIONARY:
+		for k in record:
+			if _num(r.get(k)):
+				var v: float = clampf(float(r[k]), 0.0, 1.0e9)
+				if k == "best_time":
+					record[k] = v
+				else:
+					record[k] = int(v)
 
 func save_settings() -> void:
-	var cf := ConfigFile.new()
-	for k in settings:
-		cf.set_value("ayarlar", k, settings[k])
-	for k in record:
-		cf.set_value("rekor", k, record[k])
-	cf.save(SAVE_PATH)
+	if bot_mode:
+		return
+	var f := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
+	if f != null:
+		f.store_string(JSON.stringify({"ayarlar": settings, "rekor": record}, "\t"))
 
 func apply_settings() -> void:
 	audio.apply_volumes()
@@ -220,6 +245,7 @@ func start_run() -> void:
 	paused = false
 	get_tree().paused = false
 	hit_stop = 0.0
+	hit_stop_cd = 0.0
 	game.start()
 	ui.start_hud()
 	capture_mouse()
@@ -235,6 +261,32 @@ func toggle_pause() -> void:
 	else:
 		save_settings()
 		capture_mouse()
+
+# A run left from the pause menu still counts toward the record.
+func leave_run() -> void:
+	if state != PLAY or bot_mode or game.over:
+		return
+	record.runs += 1
+	record.best_time = maxf(record.best_time, game.time)
+	record.best_kills = maxi(record.best_kills, game.kills)
+	save_settings()
+
+# Freezes the simulation for a moment. Ordinary heavy kills share a cooldown so a strong build
+# mowing through brutes does not turn into a stutter; always = true skips the cooldown.
+func stop_for(d: float, always := false) -> void:
+	if always or hit_stop_cd <= 0.0:
+		hit_stop = maxf(hit_stop, d)
+		hit_stop_cd = 0.5
+
+func _notification(what: int) -> void:
+	if ui == null:
+		return
+	if what == NOTIFICATION_APPLICATION_FOCUS_OUT:
+		# a run must not go on behind another window
+		if state == PLAY and not paused and not bot_mode:
+			toggle_pause()
+	elif what == NOTIFICATION_WM_CLOSE_REQUEST:
+		save_settings()
 
 func finish_run(victory: bool) -> void:
 	state = END
@@ -260,19 +312,25 @@ func quit_game() -> void:
 func _unhandled_input(ev: InputEvent) -> void:
 	if ev.is_action_pressed("pause"):
 		if ui.settings_overlay.visible:
-			ui.settings_overlay.visible = false
+			ui.close_settings()
 		else:
 			toggle_pause()
 	elif ev is InputEventMouseMotion and state == PLAY and not paused and not ui.choosing and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
-		player.look((ev as InputEventMouseMotion).relative)
+		# screen_relative is in real pixels: plain relative is scaled with the window, which would tie
+		# the sensitivity to the window size
+		player.look((ev as InputEventMouseMotion).screen_relative)
 
 func _process(dt: float) -> void:
 	if state == PLAY:
 		if get_tree().paused:
 			return
+		var real := dt / maxf(0.05, Engine.time_scale)
+		hit_stop_cd -= real
 		if hit_stop > 0.0:
-			hit_stop -= dt / maxf(0.05, Engine.time_scale)
+			# the world holds still, the camera and the keys do not
+			hit_stop -= real
 			player.buffer_input()
+			player.hold_camera(real)
 			return
 		if bot_mode:
 			bot.update(dt)

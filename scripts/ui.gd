@@ -38,6 +38,8 @@ var hint_t := 0.0
 var hold_choice := false
 var choice_kind := ""
 var end_menu: Button
+var menu_btns: Array[Button] = []
+var settings_ok: Button
 var end_lock := 0.0
 
 func setup(m) -> void:
@@ -173,6 +175,8 @@ func _slider_row(parent: Container, title: String, key: String, lo: float, hi: f
 	s.value_changed.connect(func(v: float):
 		main.settings[key] = v
 		main.apply_settings())
+	# saved when the handle is let go, so no way of leaving the panel loses the change
+	s.drag_ended.connect(func(_changed: bool): main.save_settings())
 	row.add_child(s)
 	parent.add_child(row)
 	if not sliders.has(key):
@@ -207,11 +211,27 @@ func _build_settings_overlay() -> void:
 	p.add_child(v)
 	v.add_child(_label("Ayarlar", 40, AMBER))
 	_settings_rows(v)
-	var b := _button("Tamam", func():
-		settings_overlay.visible = false
-		main.save_settings())
-	b.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	v.add_child(b)
+	settings_ok = _button("Tamam", func(): close_settings())
+	settings_ok.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	v.add_child(settings_ok)
+
+# While the overlay is open the menu behind it takes no keyboard focus.
+func open_settings() -> void:
+	_sync_sliders()
+	for b in menu_btns:
+		b.focus_mode = Control.FOCUS_NONE
+	settings_overlay.visible = true
+	settings_ok.grab_focus()
+
+func close_settings() -> void:
+	if not settings_overlay.visible:
+		return
+	settings_overlay.visible = false
+	main.save_settings()
+	for b in menu_btns:
+		b.focus_mode = Control.FOCUS_ALL
+	if menu.visible and menu_btns.size() > 1:
+		menu_btns[1].grab_focus()
 
 # ---------- main menu
 
@@ -241,13 +261,13 @@ func _build_menu() -> void:
 	v.add_child(sp)
 	var start := _button("Başla", func(): main.start_run(), true)
 	start.name = "Basla"
-	for b in [start, _button("Ayarlar", func():
-		_sync_sliders()
-		settings_overlay.visible = true), _button("Çıkış", func(): main.quit_game())]:
+	for b in [start, _button("Ayarlar", func(): open_settings()), _button("Çıkış", func(): main.quit_game())]:
 		b.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 		v.add_child(b)
+		menu_btns.append(b)
 
 func show_menu() -> void:
+	close_settings()
 	menu.visible = true
 	hud.visible = false
 	pause_panel.visible = false
@@ -290,8 +310,12 @@ func _build_pause() -> void:
 	var cont := _button("Devam", func(): main.toggle_pause(), true)
 	cont.name = "Devam"
 	left.add_child(cont)
-	left.add_child(_button("Yeniden başla", func(): main.start_run()))
-	left.add_child(_button("Ana menü", func(): main.to_menu()))
+	left.add_child(_button("Yeniden başla", func():
+		main.leave_run()
+		main.start_run()))
+	left.add_child(_button("Ana menü", func():
+		main.leave_run()
+		main.to_menu()))
 	var right := VBoxContainer.new()
 	right.add_theme_constant_override("separation", 20)
 	right.size_flags_vertical = Control.SIZE_SHRINK_CENTER
@@ -571,9 +595,11 @@ func _process(dt: float) -> void:
 			end_again.disabled = false
 			end_menu.disabled = false
 			end_again.grab_focus()
-	if toast_t > 0.0:
-		toast_t -= dt
-	hint_t -= dt
+	# hints and toasts wait while the game is paused, so a level-up cannot swallow them
+	if not get_tree().paused:
+		if toast_t > 0.0:
+			toast_t -= dt
+		hint_t -= dt
 	if hud.visible:
 		hud.queue_redraw()
 
@@ -588,6 +614,7 @@ func _input(ev: InputEvent) -> void:
 			_choose(2)
 
 func start_hud() -> void:
+	close_settings()
 	menu.visible = false
 	end_panel.visible = false
 	pause_panel.visible = false

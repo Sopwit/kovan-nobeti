@@ -267,7 +267,8 @@ func index_of(u: int, hint: int) -> int:
 # Indices of living enemies whose body overlaps the circle.
 func query(x: float, z: float, r: float) -> PackedInt32Array:
 	var out := PackedInt32Array()
-	var rr := r + 1.1
+	# pad by the largest body that is not the queen (an elite brute, radius 1.7)
+	var rr := r + 1.8
 	var c0x := int(floor((x - rr) / CELL)) + 512
 	var c1x := int(floor((x + rr) / CELL)) + 512
 	var c0z := int(floor((z - rr) / CELL)) + 512

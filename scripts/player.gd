@@ -163,6 +163,10 @@ func buffer_input() -> void:
 	if Input.is_action_just_pressed("slide"):
 		slide_buf = 0.14
 
+# Camera only, for frames where the simulation is frozen.
+func hold_camera(dt: float) -> void:
+	_update_camera(dt)
+
 func heal(a: float) -> void:
 	hp = minf(max_hp, hp + a)
 
@@ -242,10 +246,8 @@ func update(dt: float) -> void:
 			hv *= 1.08
 		main.audio.play("jump", 0.0, 1.0)
 	if not on_ground:
-		var g := GRAVITY
-		if vel.y > 0.0 and not main.bot_mode and not Input.is_action_pressed("jump"):
-			g *= 2.2
-		vel.y -= g * dt
+		# every jump has the same height: it is a dodge, and it has to clear spit and shock rings every time
+		vel.y -= GRAVITY * dt
 	vel.x = hv.x
 	vel.z = hv.z
 	pos += vel * dt

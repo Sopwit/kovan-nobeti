@@ -42,6 +42,13 @@ var gains := {}
 var last_play := {}
 var pool: Array[AudioStreamPlayer] = []
 var pool_i := 0
+# Long, rare sounds get their own players: the busy short ones would otherwise cut them off within
+# half a second of a fight.
+const LONG := ["boss_roar", "boss_slam", "shrine", "heal", "horn", "chest", "levelup", "victory", "defeat"]
+var long_pool: Array[AudioStreamPlayer] = []
+var long_i := 0
+# level of the outgoing track at the moment a new crossfade started
+var out_from := 1.0
 var music_a: AudioStreamPlayer
 var music_b: AudioStreamPlayer
 var music_streams := {}
@@ -71,11 +78,14 @@ func setup(m) -> void:
 			var s = load(p2)
 			s.loop = true
 			music_streams[k] = s
-	for i in 20:
+	for i in 26:
 		var pl := AudioStreamPlayer.new()
 		pl.bus = "SFX"
 		add_child(pl)
-		pool.append(pl)
+		if i < 20:
+			pool.append(pl)
+		else:
+			long_pool.append(pl)
 	music_a = AudioStreamPlayer.new()
 	music_b = AudioStreamPlayer.new()
 	for mp in [music_a, music_b]:
@@ -98,8 +108,13 @@ func play(n: String, extra_db := 0.0, pitch := 1.0) -> void:
 	if clock - float(last_play.get(n, -10.0)) < gap:
 		return
 	last_play[n] = clock
-	var pl := pool[pool_i]
-	pool_i = (pool_i + 1) % pool.size()
+	var pl: AudioStreamPlayer
+	if LONG.has(n):
+		pl = long_pool[long_i]
+		long_i = (long_i + 1) % long_pool.size()
+	else:
+		pl = pool[pool_i]
+		pool_i = (pool_i + 1) % pool.size()
 	pl.stream = streams[n]
 	# extra_db can only make a sound quieter than its measured level, never louder
 	pl.volume_db = gains[n] + minf(0.0, extra_db)
@@ -111,6 +126,9 @@ func music(n: String) -> void:
 	if n == current or not music_streams.has(n):
 		return
 	current = n
+	# a switch in the middle of a crossfade starts from the level the incoming track had reached
+	out_from = sin(fade * PI * 0.5) if fade < 1.0 else 1.0
+	music_b.stop()
 	var t := music_a
 	music_a = music_b
 	music_b = t
@@ -128,7 +146,7 @@ func _process(dt: float) -> void:
 		# equal-power crossfade
 		music_a.volume_db = gain_a + linear_to_db(maxf(0.001, sin(fade * PI * 0.5)))
 		if music_b.playing:
-			music_b.volume_db = gain_b + linear_to_db(maxf(0.001, cos(fade * PI * 0.5)))
+			music_b.volume_db = gain_b + linear_to_db(maxf(0.001, out_from * cos(fade * PI * 0.5)))
 			if fade >= 1.0:
 				music_b.stop()
 	elif current != "" and not music_a.playing:

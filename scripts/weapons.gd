@@ -142,6 +142,8 @@ func update(dt: float) -> void:
 				if t < 0 and k > 0:
 					t = en.nearest(p.x, p.z, 12.5)
 				if t < 0:
+					t = boss
+				if t < 0:
 					break
 				skip[en.uid[t]] = true
 				_fire_bee(p, t, 10.0 + 5.0 * b(l >= 3) + 7.0 * b(l >= 6) + 10.0 * b(l >= 7), b(l >= 4) + b(l >= 6) + b(l >= 7), k, n)
