@@ -98,9 +98,11 @@ func reset() -> void:
 	model.rotation = Vector3.ZERO
 	model.visible = true
 	cam_yaw = 0.0
-	cam_pitch = -0.44
-	# a run opens wide on the great hive and settles in behind the keeper
-	cam_dist = 15.0 if main.state == main.PLAY else 6.8
+	cam_pitch = BASE_PITCH
+	pitch_back = false
+	mercy_cd = 0.0
+	# a run opens wide on the great hive and settles in above the keeper
+	cam_dist = 18.0 if main.state == main.PLAY else 6.8
 	look_shift = 0.0
 	focus_t = 0.0
 	facing = 0.0
@@ -123,6 +125,8 @@ func menu_idle(dt: float) -> void:
 	_update_camera(dt)
 
 func look(rel: Vector2) -> void:
+	# the mouse always wins over a camera that is drifting back from a staged shot
+	pitch_back = false
 	var s: float = main.settings.sens * 0.0032
 	cam_yaw -= rel.x * s
 	cam_pitch = clampf(cam_pitch - rel.y * s, -1.2, -0.08)
@@ -139,13 +143,22 @@ func hurt(amount: float, fx: float, fz: float) -> bool:
 	if not alive or inv_t > 0.0 or main.debug_god:
 		return false
 	var a := maxf(1.0, amount - armor)
+	var was_low := hp < max_hp * 0.3
 	hp -= a
 	inv_t = 0.6
+	if hp > 0.0 and not was_low and hp < max_hp * 0.3 and mercy_cd <= 0.0:
+		# the hit that leaves the keeper low buys real room and says so: a death should never come out of nowhere
+		mercy_cd = 20.0
+		inv_t = 1.3
+		main.weapons.push_back(pos, 6.5, 16.0, false)
+		main.game.slow(0.45, 0.4)
+		main.ui.toast("Canın azaldı, uzaklaş")
 	# a hit buys a moment of room instead of starting a chain of hits
 	main.weapons.push_back(pos, 3.6, 10.0, false)
 	main.game.stats.taken += a
 	main.fx.shake(0.45)
 	main.fx.hurt_flash()
+	main.ui.hurt_from(fx, fz)
 	main.audio.play("hurt", 0.0, 1.0)
 	var d := Vector3(pos.x - fx, 0, pos.z - fz)
 	if d.length() > 0.01:
@@ -171,10 +184,19 @@ func buffer_input() -> void:
 # For a staged moment the camera turns to a point in the world and narrows; the keeper stays in control.
 var focus_pos := Vector3.ZERO
 var focus_t := 0.0
+# the camera sits high enough behind the keeper that the swarm chasing them stays on screen
+const BASE_PITCH := -0.62
+# a staged shot tilts the camera; afterwards it drifts back to where the player had it
+var pitch_keep := BASE_PITCH
+var pitch_back := false
+var mercy_cd := 0.0
 
 func focus_on(p: Vector3, secs: float) -> void:
+	if focus_t <= 0.0 and not pitch_back:
+		pitch_keep = cam_pitch
 	focus_pos = p
 	focus_t = secs
+	pitch_back = true
 
 # Takes real seconds (the world is held still); the camera code expects scaled time and converts back itself.
 func hold_camera(real: float) -> void:
@@ -200,6 +222,8 @@ func update(dt: float) -> void:
 		return
 	if inv_t > 0.0:
 		inv_t -= dt
+	if mercy_cd > 0.0:
+		mercy_cd -= dt
 	if regen > 0.0:
 		heal(regen * dt)
 	slide_cd -= dt
@@ -327,9 +351,9 @@ func update(dt: float) -> void:
 	var bs := clampf(1.0 - pos.y * 0.12, 0.4, 1.0)
 	blob.scale = Vector3(bs, 1, bs)
 	# close behind the keeper while the field is quiet, pulling back as the swarm thickens
-	var want_d := 6.8 + 3.0 * clampf(main.enemies.count / 170.0, 0.0, 1.0)
+	var want_d := 11.0 + 3.0 * clampf(main.enemies.count / 170.0, 0.0, 1.0)
 	# the opening wide shot closes in faster than the camera breathes with the crowd
-	cam_dist = lerpf(cam_dist, want_d, minf(1.0, dt * (2.2 if cam_dist > 10.5 else 0.8)))
+	cam_dist = lerpf(cam_dist, want_d, minf(1.0, dt * (2.2 if cam_dist > want_d + 1.5 else 0.8)))
 	_update_camera(dt)
 
 func _slide_damage() -> void:
@@ -356,7 +380,11 @@ func _update_camera(dt: float) -> void:
 		if Vector2(to.x, to.z).length() > 1.5:
 			cam_yaw = lerp_angle(cam_yaw, atan2(-to.x, -to.z), minf(1.0, real * 4.0 * focus))
 			cam_pitch = lerpf(cam_pitch, -0.22, minf(1.0, real * 3.0 * focus))
-	var target := pos + Vector3(0, 1.7, 0) + Vector3(cos(cam_yaw), 0, -sin(cam_yaw)) * look_shift
+	elif pitch_back and dt < 1.0:
+		cam_pitch = lerpf(cam_pitch, pitch_keep, minf(1.0, dt * 2.5))
+		if absf(cam_pitch - pitch_keep) < 0.01:
+			pitch_back = false
+	var target := pos + Vector3(0, 1.3, 0) + Vector3(cos(cam_yaw), 0, -sin(cam_yaw)) * look_shift
 	if focus > 0.0:
 		target = target.lerp(focus_pos + Vector3(0, 2.5, 0), 0.3 * focus)
 	var back := Vector3(sin(cam_yaw) * cos(cam_pitch), -sin(cam_pitch), cos(cam_yaw) * cos(cam_pitch))

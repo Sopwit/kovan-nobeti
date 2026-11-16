@@ -32,6 +32,8 @@ var choice_lock := 0.0
 var bot_t := 0.0
 var toast_text := ""
 var toast_t := 0.0
+# where recent hits came from: [x, z, time left]
+var hurt_marks: Array = []
 # a big announcement with a line under it: champions, the queen
 var banner_title := ""
 var banner_sub := ""
@@ -67,6 +69,12 @@ func setup(m) -> void:
 	hurt = ColorRect.new()
 	hurt.set_anchors_preset(Control.PRESET_FULL_RECT)
 	hurt.color = Color(1, 0, 0, 0)
+	# red gathers at the edges of the screen: a hit or low health must not paint over the fight
+	var hsh := Shader.new()
+	hsh.code = "shader_type canvas_item;\nvoid fragment() {\n\tfloat d = length(UV - vec2(0.5)) * 1.414;\n\tCOLOR.a *= mix(0.18, 1.0, smoothstep(0.42, 1.0, d));\n}\n"
+	var hmat := ShaderMaterial.new()
+	hmat.shader = hsh
+	hurt.material = hmat
 	hurt.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(hurt)
 	num_layer = Control.new()
@@ -162,6 +170,12 @@ func banner(title: String, sub: String) -> void:
 func toast(t: String) -> void:
 	toast_text = t
 	toast_t = 2.6
+
+# A hit leaves an arc on the side of the screen it came from.
+func hurt_from(x: float, z: float) -> void:
+	if hurt_marks.size() >= 6:
+		hurt_marks.pop_front()
+	hurt_marks.append([x, z, 1.1])
 
 # ---------- settings (shared by the pause menu and the main menu)
 
@@ -783,6 +797,10 @@ func _process(dt: float) -> void:
 		if banner_t > 0.0:
 			banner_t -= dt
 		hint_t -= dt
+		for hm in hurt_marks:
+			hm[2] -= dt / maxf(0.05, Engine.time_scale / main.debug_speed)
+		while not hurt_marks.is_empty() and hurt_marks[0][2] <= 0.0:
+			hurt_marks.pop_front()
 	if hud.visible:
 		hud.queue_redraw()
 
@@ -818,6 +836,7 @@ func start_hud() -> void:
 	hint_t = 14.0
 	toast_t = 0.0
 	banner_t = 0.0
+	hurt_marks.clear()
 
 func _text(c: CanvasItem, pos: Vector2, s: String, size: int, col: Color, align := HORIZONTAL_ALIGNMENT_LEFT, width := -1.0) -> void:
 	# every distinct size makes the font build another glyph atlas, so animated sizes move in coarse steps
@@ -901,6 +920,16 @@ func _draw_hud() -> void:
 		_text(hud, Vector2(x + 30, H - 112), str(g.passives[id]), 18, TEAL)
 		x += 56.0
 	_draw_minimap(W)
+	# where the last hits came from, as arcs around the middle of the screen (top = ahead of the camera)
+	var hyaw: float = pl.cam_yaw
+	for hm in hurt_marks:
+		var hr2 := Vector2(hm[0] - pl.pos.x, hm[1] - pl.pos.z)
+		if hr2.length() < 0.4 or hm[2] <= 0.0:
+			continue
+		var hang := atan2(hr2.x * sin(hyaw) + hr2.y * cos(hyaw), hr2.x * cos(hyaw) - hr2.y * sin(hyaw))
+		var hal := clampf(float(hm[2]) * 1.6, 0.0, 1.0)
+		hud.draw_arc(Vector2(W * 0.5, H * 0.5), H * 0.34, hang - 0.42, hang + 0.42, 18, Color(1.0, 0.12, 0.1, 0.8 * hal), 20.0)
+		hud.draw_arc(Vector2(W * 0.5, H * 0.5), H * 0.34 + 14.0, hang - 0.3, hang + 0.3, 14, Color(1.0, 0.55, 0.4, 0.9 * hal), 5.0)
 	if main.world.shrine_progress >= 0.0:
 		_text(hud, Vector2(W * 0.5 - 200, H * 0.70), "Sunak uyanıyor", 26, TEAL, HORIZONTAL_ALIGNMENT_CENTER, 400)
 		_bar(hud, Rect2(W * 0.5 - 170, H * 0.70 + 12, 340, 14), main.world.shrine_progress, TEAL)
@@ -919,30 +948,64 @@ func _draw_hud() -> void:
 		_text(hud, Vector2(W * 0.5 - 700, H - 120), "WASD koş     Boşluk zıpla     Shift kay     Q dolunca Kovan Çağrısı", 26, Color(1, 1, 1, ha), HORIZONTAL_ALIGNMENT_CENTER, 1400)
 
 func _draw_minimap(W: float) -> void:
+	# a radar: the keeper in the middle, the camera's forward at the top, 42 m to the rim,
+	# so the swarm closing in from behind shows at the bottom
 	var c := Vector2(W - 128, 138)
 	var R := 100.0
-	var sc: float = R / main.world.ARENA_R
+	var sc := R / 42.0
+	var pl = main.player
+	var yaw: float = pl.cam_yaw
+	var ax := Vector2(cos(yaw), -sin(yaw)) * sc
+	var ay := Vector2(sin(yaw), cos(yaw)) * sc
+	var o := Vector2(pl.pos.x, pl.pos.z)
 	hud.draw_circle(c, R + 6, Color(0.04, 0.07, 0.14, 0.62))
 	hud.draw_arc(c, R + 2, 0, TAU, 56, Color(1, 1, 1, 0.55), 2.0)
+	# the arena wall, where a crowd pins you
+	var ar: float = main.world.ARENA_R
+	var prev := Vector2.ZERO
+	for k in 73:
+		var wa := TAU * k / 72.0
+		var wr := Vector2(cos(wa) * ar, sin(wa) * ar) - o
+		var wp := Vector2(wr.dot(ax), wr.dot(ay))
+		if k > 0 and wp.length() < R and prev.length() < R:
+			hud.draw_line(c + prev, c + wp, Color(1.0, 0.85, 0.6, 0.7), 3.0)
+		prev = wp
+	var gh: Vector3 = main.world.GREAT
+	var gr := Vector2(gh.x, gh.y) - o
+	var gp := Vector2(gr.dot(ax), gr.dot(ay))
+	if gp.length() < R - gh.z * sc:
+		hud.draw_circle(c + gp, gh.z * sc, Color(0.62, 0.4, 0.2, 0.9))
+	else:
+		hud.draw_circle(c + gp.limit_length(R - 5.0), 5.0, Color(0.62, 0.4, 0.2, 0.9))
 	for s in main.world.shrines:
 		if not s.done:
-			var p: Vector2 = c + Vector2(s.pos.x, s.pos.z) * sc
+			var sr := Vector2(s.pos.x, s.pos.z) - o
+			var p: Vector2 = c + Vector2(sr.dot(ax), sr.dot(ay)).limit_length(R - 5.0)
 			hud.draw_colored_polygon(PackedVector2Array([p + Vector2(0, -7), p + Vector2(7, 0), p + Vector2(0, 7), p + Vector2(-7, 0)]), TEAL)
 	for ch in main.world.chests:
 		if not ch.open:
-			var p2: Vector2 = c + Vector2(ch.pos.x, ch.pos.z) * sc
+			var cr := Vector2(ch.pos.x, ch.pos.z) - o
+			var p2: Vector2 = c + Vector2(cr.dot(ax), cr.dot(ay)).limit_length(R - 5.0)
 			hud.draw_rect(Rect2(p2 - Vector2(5, 5), Vector2(10, 10)), AMBER)
 	for j in main.world.jars:
 		if not j.taken:
-			hud.draw_circle(c + Vector2(j.pos.x, j.pos.z) * sc, 3.5, Color(1.0, 0.45, 0.5))
+			var jr := Vector2(j.pos.x, j.pos.z) - o
+			var jp := Vector2(jr.dot(ax), jr.dot(ay))
+			if jp.length() < R:
+				hud.draw_circle(c + jp, 3.5, Color(1.0, 0.45, 0.5))
 	for it in main.pickups.items:
-		hud.draw_circle(c + Vector2(it.pos.x, it.pos.z) * sc, 5.0, AMBER if it.kind == "chest" else (Color(1.0, 0.45, 0.5) if it.kind == "heal" else Color(0.3, 0.8, 1.0)))
+		var ir := Vector2(it.pos.x, it.pos.z) - o
+		hud.draw_circle(c + Vector2(ir.dot(ax), ir.dot(ay)).limit_length(R - 5.0), 5.0, AMBER if it.kind == "chest" else (Color(1.0, 0.45, 0.5) if it.kind == "heal" else Color(0.3, 0.8, 1.0)))
 	var en = main.enemies
+	var dot := Color(1.0, 0.32, 0.25, 0.9)
 	for i in en.count:
-		if en.dead[i] == 0 and (en.elite[i] == 1 or en.typ[i] == en.T_BOSS or en.typ[i] >= en.T_STAG):
-			hud.draw_circle(c + Vector2(en.px[i], en.pz[i]) * sc, 5.0 if en.elite[i] == 1 else 8.0, Color(1.0, 0.2, 0.2))
-	var pp: Vector2 = c + Vector2(main.player.pos.x, main.player.pos.z) * sc
-	var yaw: float = main.player.cam_yaw
-	var f := Vector2(-sin(yaw), -cos(yaw))
-	var rt := Vector2(-f.y, f.x)
-	hud.draw_colored_polygon(PackedVector2Array([pp + f * 10.0, pp - f * 6.0 + rt * 6.5, pp - f * 6.0 - rt * 6.5]), Color.WHITE)
+		if en.dead[i] == 1:
+			continue
+		var er := Vector2(en.px[i], en.pz[i]) - o
+		var ep := Vector2(er.dot(ax), er.dot(ay))
+		if en.elite[i] == 1 or en.typ[i] == en.T_BOSS or en.typ[i] >= en.T_STAG:
+			hud.draw_circle(c + ep.limit_length(R - 5.0), 5.0 if en.elite[i] == 1 else 8.0, Color(1.0, 0.2, 0.2))
+		elif ep.length_squared() < R * R:
+			# the swarm itself: one small dot per bug
+			hud.draw_rect(Rect2(c + ep - Vector2(1.5, 1.5), Vector2(3, 3)), dot)
+	hud.draw_colored_polygon(PackedVector2Array([c + Vector2(0, -10), c + Vector2(6.5, 6), c + Vector2(-6.5, 6)]), Color.WHITE)

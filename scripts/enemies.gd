@@ -413,8 +413,13 @@ func hurt(i: int, amount: float, kx: float, kz: float, src: String, crit := fals
 	if i < 0 or i >= count or dead[i] == 1:
 		return false
 	hp[i] -= amount
-	flash[i] = 1.0
 	var t := typ[i]
+	if t == T_BOSS or t >= T_STAG:
+		# hit many times a second, a big body would stay white: one short pulse, then a rest that shows its skin
+		if flash[i] <= -1.4:
+			flash[i] = 0.5
+	else:
+		flash[i] = 1.0
 	var kb: float = TYPES[t].kb * (0.5 if elite[i] == 1 else 1.0)
 	vx[i] += kx * kb
 	vz[i] += kz * kb
@@ -524,7 +529,10 @@ func update(dt: float) -> void:
 		if slow_t[i] > 0.0:
 			slow_t[i] -= dt
 			speed *= 0.55
-		if flash[i] > 0.0:
+		if t == T_BOSS or t >= T_STAG:
+			# below zero is the rest between two hit pulses
+			flash[i] = maxf(-1.5, flash[i] - fd)
+		elif flash[i] > 0.0:
 			flash[i] = maxf(0.0, flash[i] - fd)
 		if atk_cd[i] > 0.0:
 			atk_cd[i] -= dt
@@ -711,7 +719,7 @@ func update(dt: float) -> void:
 		if k2 >= m2.instance_count:
 			continue
 		m2.set_instance_transform(k2, Transform3D(bas, Vector3(px[i], yy + dig, pz[i])))
-		m2.set_instance_custom_data(k2, Color(flash[i], phase[i], act, 0.0))
+		m2.set_instance_custom_data(k2, Color(maxf(0.0, flash[i]), phase[i], act, 0.0))
 		if t >= T_STAG and hp[i] < maxhp[i] * 0.5:
 			# a champion that is half down turns angry red
 			m2.set_instance_color(k2, Color(1.0, 0.66, 0.6))
