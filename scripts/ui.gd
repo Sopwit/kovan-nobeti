@@ -47,6 +47,8 @@ var end_menu: Button
 var menu_btns: Array[Button] = []
 var settings_ok: Button
 var end_lock := 0.0
+var end_goal: Label
+var end_hive: Button
 var reroll_btn: Button
 var hive_panel: Control
 var hive_btn: Button
@@ -587,7 +589,12 @@ func _build_choice() -> void:
 		ds.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		ds.size_flags_vertical = Control.SIZE_EXPAND_FILL
 		box.add_child(ds)
-		cards.append({"button": b, "icon": icon, "name": nm, "level": lv, "desc": ds, "pair": pair, "pair_icon": pair_icon})
+		# what this card still needs for an evolution, in words
+		var ev := _label("", 20, Color(0.7, 0.75, 0.92), false)
+		ev.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		ev.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		box.add_child(ev)
+		cards.append({"button": b, "icon": icon, "name": nm, "level": lv, "desc": ds, "pair": pair, "pair_icon": pair_icon, "evo": ev})
 	# a few times per run the three cards can be drawn again
 	reroll_btn = _button("Yenile", func(): _reroll())
 	reroll_btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
@@ -595,7 +602,7 @@ func _build_choice() -> void:
 	v.add_child(reroll_btn)
 
 func _reroll() -> void:
-	if not choosing or choice_lock > 0.0 or main.game.rerolls <= 0:
+	if not choosing or choice_lock > 0.0 or main.game.rerolls <= 0 or choice_kind == "evo" or main.paused:
 		return
 	main.game.rerolls -= 1
 	show_choice(choice_kind, main.game.choices(), true)
@@ -607,10 +614,11 @@ func show_choice(kind: String, list: Array, again := false) -> void:
 	Engine.time_scale = main.debug_speed
 	reroll_btn.text = "Yenile (R)  ·  %d" % main.game.rerolls
 	reroll_btn.disabled = main.game.rerolls <= 0
+	reroll_btn.visible = kind != "evo"
 	bot_t = 0.25
 	card_data = list
 	choice_kind = kind
-	choice_title.text = "SANDIK AÇILDI" if kind == "chest" else "SEVİYE %d" % main.game.level
+	choice_title.text = "ŞAMPİYON SANDIĞI" if kind == "evo" else ("SANDIK AÇILDI" if kind == "chest" else "SEVİYE %d" % main.game.level)
 	for i in 3:
 		var u: Dictionary = list[i]
 		var c: Dictionary = cards[i]
@@ -625,6 +633,18 @@ func show_choice(kind: String, list: Array, again := false) -> void:
 			c.pair_icon.texture = icons.get(main.game.upg(partner).icon)
 			var ready: bool = main.game.evo_ready(u.id if u.kind == "w" else partner)
 			c.pair.modulate.a = 1.0 if ready else 0.5
+		c.evo.text = ""
+		c.evo.add_theme_color_override("font_color", Color(0.7, 0.75, 0.92))
+		if partner != "" and u.kind == "w":
+			var need: Array = main.game.EVO[u.id]
+			c.evo.text = "Evrim için 6. seviye ve %s %d" % [main.game.upg(need[0]).name, need[1]]
+			if main.game.evo_ready(u.id):
+				c.evo.add_theme_color_override("font_color", AMBER)
+		elif partner != "" and main.game.level_of(partner) <= main.game.upg(partner).max:
+			var need2: Array = main.game.EVO[partner]
+			c.evo.text = "%s evrimi için %d gerek" % [main.game.upg(partner).name, need2[1]]
+			if l >= int(need2[1]):
+				c.evo.text = ""
 		if u.id == "sifa":
 			c.level.text = ""
 			c.desc.text = u.desc
@@ -657,12 +677,15 @@ func show_choice(kind: String, list: Array, again := false) -> void:
 		held.release_focus()
 
 func _choose(i: int) -> void:
-	if not choosing or choice_lock > 0.0:
+	if not choosing or choice_lock > 0.0 or main.paused:
 		return
 	choosing = false
 	main.audio.play("click")
 	var picked: Dictionary = card_data[i]
-	main.game.apply(picked.id)
+	if picked.kind == "e":
+		main.game.evolve(picked.id)
+	else:
+		main.game.apply(picked.id)
 	if choice_kind == "chest" and picked.id != "sifa" and picked.kind != "e" and main.game.level_of(picked.id) < picked.max:
 		main.game.apply(picked.id)
 	choice_panel.visible = false
@@ -674,7 +697,7 @@ func _choose(i: int) -> void:
 		main.player.inv_t = maxf(main.player.inv_t, 0.5)
 	else:
 		var kind: String = main.game.queue.pop_front()
-		show_choice(kind, main.game.choices())
+		show_choice(kind, main.game.cards_for(kind))
 
 # ---------- end screen
 
@@ -713,10 +736,20 @@ func _build_end() -> void:
 	bh.add_theme_constant_override("separation", 24)
 	bh.alignment = BoxContainer.ALIGNMENT_CENTER
 	v.add_child(bh)
-	end_again = _button("Bir tur daha", func(): main.start_run(), true)
+	end_goal = _label("", 30, AMBER)
+	end_goal.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	v.add_child(end_goal)
+	v.move_child(end_goal, v.get_child_count() - 2)
+	end_again = _button("Bir tur daha (Enter)", func(): main.start_run(), true)
 	bh.add_child(end_again)
+	end_hive = _button("Arılık", func():
+		main.to_menu()
+		open_hive())
+	bh.add_child(end_hive)
 	end_menu = _button("Ana menü", func(): main.to_menu())
 	bh.add_child(end_menu)
+	for eb in [end_again, end_hive, end_menu]:
+		eb.focus_mode = Control.FOCUS_NONE
 
 func _stat_row(parent: Container, name: String, value: String, col := CREAM) -> void:
 	var row := HBoxContainer.new()
@@ -769,9 +802,25 @@ func show_end(victory: bool, new_record: bool) -> void:
 		end_damage.add_child(row)
 	end_panel.visible = true
 	# the buttons wake up a moment later, so keys still held from the fight cannot skip the screen
-	end_lock = 0.9
+	end_lock = 1.2
 	end_again.disabled = true
 	end_menu.disabled = true
+	end_hive.disabled = true
+	# the next thing to play for: the cheapest apiary upgrade still open
+	var goal_name := ""
+	var goal_cost := 0
+	for def in g.META:
+		var mlv := int(main.meta.get(def.id, 0))
+		if mlv < def.cost.size() and (goal_name == "" or int(def.cost[mlv]) < goal_cost):
+			goal_name = def.name
+			goal_cost = int(def.cost[mlv])
+	end_hive.text = "Arılık  ·  %d bal" % main.honey
+	if goal_name == "":
+		end_goal.text = "Arılık'taki bütün geliştirmeler alındı"
+	elif main.honey >= goal_cost:
+		end_goal.text = "Balın %s geliştirmesine yetiyor" % goal_name
+	else:
+		end_goal.text = "%s için %d bal daha" % [goal_name, goal_cost - main.honey]
 
 # ---------- per frame
 
@@ -787,9 +836,10 @@ func _process(dt: float) -> void:
 	if end_panel.visible and end_lock > 0.0:
 		end_lock -= dt
 		if end_lock <= 0.0:
+			# no button takes focus: nothing on this screen reacts to the jump key
 			end_again.disabled = false
 			end_menu.disabled = false
-			end_again.grab_focus()
+			end_hive.disabled = false
 	# hints and toasts wait while the game is paused, so a level-up cannot swallow them
 	if not get_tree().paused:
 		if toast_t > 0.0:
@@ -814,7 +864,14 @@ func bot_pick(list: Array) -> int:
 	return pick
 
 func _input(ev: InputEvent) -> void:
-	if choosing and ev is InputEventKey and ev.pressed and not ev.echo:
+	if end_panel.visible and end_lock <= 0.0 and ev is InputEventKey and ev.pressed and not ev.echo:
+		# the end screen restarts on Enter only: the jump key held through a death must not skip it
+		var ek: int = (ev as InputEventKey).physical_keycode
+		if ek == KEY_ENTER or ek == KEY_KP_ENTER:
+			get_viewport().set_input_as_handled()
+			main.start_run()
+			return
+	if choosing and not main.paused and ev is InputEventKey and ev.pressed and not ev.echo:
 		var k: int = (ev as InputEventKey).physical_keycode
 		if k == KEY_1 or k == KEY_KP_1:
 			_choose(0)

@@ -40,14 +40,14 @@ const EVO := {
 }
 # The apiary: permanent upgrades bought with honey between runs. cost[n] buys level n + 1.
 const META := [
-	{"id": "can", "name": "Sağlam Tulum", "icon": 36, "cost": [30, 60, 100, 150, 220], "desc": "+8 can"},
-	{"id": "guc", "name": "Keskin İğne", "icon": 31, "cost": [30, 60, 100, 150, 220], "desc": "+%4 hasar"},
-	{"id": "hiz", "name": "Hafif Çizme", "icon": 6, "cost": [30, 60, 100, 150, 220], "desc": "+%2 koşu hızı"},
-	{"id": "kepce", "name": "Geniş Kepçe", "icon": 7, "cost": [30, 60, 100, 150, 220], "desc": "+%8 toplama menzili"},
-	{"id": "bilgi", "name": "Bilge Arı", "icon": 30, "cost": [30, 60, 100, 150, 220], "desc": "+%4 tecrübe"},
-	{"id": "boru", "name": "Gür Boru", "icon": 22, "cost": [30, 60, 100, 150, 220], "desc": "Kovan Çağrısı %8 hızlı dolar"},
-	{"id": "zar", "name": "Zar", "icon": 23, "cost": [60, 120, 200], "desc": "+1 kart yenileme"},
-	{"id": "nefes", "name": "İkinci Nefes", "icon": 25, "cost": [250], "desc": "Turda bir kez ölümden dönersin"},
+	{"id": "can", "name": "Sağlam Tulum", "icon": 36, "cost": [15, 40, 80, 130, 200], "desc": "+8 can"},
+	{"id": "guc", "name": "Keskin İğne", "icon": 31, "cost": [15, 40, 80, 130, 200], "desc": "+%4 hasar"},
+	{"id": "hiz", "name": "Hafif Çizme", "icon": 6, "cost": [15, 40, 80, 130, 200], "desc": "+%2 koşu hızı"},
+	{"id": "kepce", "name": "Geniş Kepçe", "icon": 7, "cost": [15, 40, 80, 130, 200], "desc": "+%8 toplama menzili"},
+	{"id": "bilgi", "name": "Bilge Arı", "icon": 30, "cost": [15, 40, 80, 130, 200], "desc": "+%4 tecrübe"},
+	{"id": "boru", "name": "Gür Boru", "icon": 22, "cost": [15, 40, 80, 130, 200], "desc": "Kovan Çağrısı %8 hızlı dolar"},
+	{"id": "zar", "name": "Zar", "icon": 23, "cost": [40, 100, 180], "desc": "+1 kart yenileme"},
+	{"id": "nefes", "name": "İkinci Nefes", "icon": 25, "cost": [200], "desc": "Turda bir kez ölümden dönersin"},
 ]
 const HEAL_CARD := {"id": "sifa", "name": "Bal Kavanozu", "icon": 18, "max": 999, "kind": "p", "desc": "40 can iyileşir"}
 const SRC_NAMES := {"ari": "Arı Sürüsü", "tutsu": "Tütsü Halkası", "bomba": "Bal Bombası", "igne": "İğne Çarkı", "kivilcim": "Polen Kıvılcımı", "inis": "Ezici İniş", "kayis": "Dikenli Kayış", "sunak": "Sunak", "patlak": "Patlak Zinciri",
@@ -68,6 +68,8 @@ var xp_need := 6
 var xp_mult := 1.0
 var passives := {}
 var queue: Array[String] = []
+# champion prizes not opened yet: each turns the next chest into an evolution
+var evo_chests := 0
 var stats := {"taken": 0.0, "dealt": 0.0, "by": {}, "chests": 0, "shrines": 0}
 var spawn_acc := 0.0
 var next_wave := 60.0
@@ -109,6 +111,7 @@ func start() -> void:
 	xp_mult = 1.0
 	passives = {}
 	queue.clear()
+	evo_chests = 0
 	stats = {"taken": 0.0, "dealt": 0.0, "by": {}, "chests": 0, "shrines": 0}
 	spawn_acc = 3.0
 	hits = {}
@@ -200,9 +203,13 @@ func choices() -> Array:
 			continue
 		pool.append(u)
 		if u.kind == "w":
-			weights.append(1.5 if l > 0 else 1.3)
+			# a weapon already half way up is offered more often, so builds reach their evolution
+			weights.append((2.0 if l >= 3 else 1.5) if l > 0 else 1.3)
 		else:
-			weights.append(1.0)
+			# so is the trait a carried weapon still needs for it
+			var pw := evo_partner(u.id)
+			var feeds: bool = pw != "" and main.weapons.levels[pw] > 0 and main.weapons.levels[pw] <= upg(pw).max and l < int(EVO[pw][1])
+			weights.append(2.2 if feeds else 1.0)
 	var out: Array = evos
 	while out.size() < 3 and not pool.is_empty():
 		var total := 0.0
@@ -238,11 +245,7 @@ func apply(id: String) -> void:
 	elif main.weapons.levels.has(id):
 		main.weapons.levels[id] += 1
 		if main.weapons.levels[id] == upg(id).max + 1:
-			# an evolution is a moment: say its name and clear some room
-			main.ui.toast("EVRİM: %s" % EVO[id][2])
-			main.audio.play("shrine", 0.0, 1.2)
-			main.fx.shake(0.6)
-			main.weapons.explode(main.player.pos, 9.0, 60.0, id)
+			_evo_moment(id)
 	else:
 		passives[id] = passives.get(id, 0) + 1
 		if id == "kalp":
@@ -278,7 +281,56 @@ func add_xp(v: int) -> void:
 
 func open_chest() -> void:
 	stats.chests += 1
-	queue.append("chest")
+	if evo_chests > 0 and not _evo_ids().is_empty():
+		# the first chest opened after a champion falls carries its prize: an evolution outright
+		evo_chests -= 1
+		queue.append("evo")
+	else:
+		queue.append("chest")
+
+# Weapons that are carried and not evolved yet, the highest level first.
+func _evo_ids() -> Array:
+	var ids: Array = []
+	for wid in main.weapons.IDS:
+		var l: int = main.weapons.levels[wid]
+		if l > 0 and l <= upg(wid).max:
+			ids.append(wid)
+	ids.sort_custom(func(a, b): return main.weapons.levels[a] > main.weapons.levels[b])
+	return ids
+
+# The three cards for a queued choice.
+func cards_for(kind: String) -> Array:
+	if kind != "evo":
+		return choices()
+	var out: Array = []
+	for wid in _evo_ids():
+		if out.size() < 3:
+			var u: Dictionary = upg(wid)
+			var e: Array = EVO[wid]
+			out.append({"id": wid, "name": e[2], "icon": u.icon, "max": u.max + 1, "kind": "e", "desc": "%s evrilir\n%s" % [u.name, e[3]]})
+	if out.is_empty():
+		return choices()
+	# fewer than three weapons carried: ordinary cards fill the row
+	for u2 in choices():
+		if out.size() < 3 and u2.kind != "e":
+			out.append(u2)
+	return out
+
+# Takes a weapon straight to its evolved form, whatever level it was at.
+func evolve(id: String) -> void:
+	main.weapons.levels[id] = upg(id).max + 1
+	_evo_moment(id)
+	_recalc()
+
+func _evo_moment(id: String) -> void:
+	# an evolution is a moment: say its name and clear some room
+	main.ui.banner("EVRİM", EVO[id][2])
+	main.audio.play("shrine", 0.0, 1.2)
+	main.fx.shake(0.6)
+	main.weapons.explode(main.player.pos, 9.0, 60.0, id)
+	stats.evos = stats.get("evos", 0) + 1
+	if main.bot_mode:
+		print("T EVO %s t=%d lv=%d" % [id, int(time), level])
 
 func shrine_done(at: Vector3) -> void:
 	stats.shrines += 1
@@ -305,6 +357,19 @@ const BOSS_PROBE := 10.0
 var boss_taken := 0.0
 var boss_t := 0.0
 var boss_sized := false
+# what the build dealt per second to the whole swarm just before she arrived
+var boss_recent := 0.0
+
+# The queen drops under half: the fight changes gear and says so.
+func boss_rage(at: Vector3) -> void:
+	main.ui.banner("KRALİÇE ÖFKELENDİ", "Zehir yağdırıyor, daha sık vuruyor")
+	main.audio.play("boss_roar", 0.0, 0.8)
+	main.fx.shake(0.9)
+	main.fx.explosion(at, 12.0, Color(1.0, 0.3, 0.2))
+	main.player.focus_on(at, 1.3)
+	slow(0.9, 0.35)
+	if main.bot_mode:
+		print("T BOSS rage t=%d" % int(time))
 
 func hint(key: String, text: String) -> void:
 	if not hinted.has(key):
@@ -363,7 +428,8 @@ func on_enemy_killed(t: int, at: Vector3, elite: bool, s: float) -> void:
 			var ga := TAU * k / 10.0
 			main.pickups.drop_gem(at + Vector3(cos(ga) * 2.2, 0, sin(ga) * 2.2), 6)
 		main.player.heal(20.0)
-		main.ui.banner(CHAMP_NAMES[t - main.enemies.T_STAG] + " DEVRİLDİ", "Sandığını al")
+		evo_chests += 1
+		main.ui.banner(CHAMP_NAMES[t - main.enemies.T_STAG] + " DEVRİLDİ", "Sandığı bir silahını evriltir")
 		stats.champs = stats.get("champs", 0) + 1
 		return
 	var v: int = main.enemies.TYPES[t].xp
@@ -551,7 +617,7 @@ func update(dt: float) -> void:
 			main.audio.music("gece")
 		if not queue.is_empty() and not main.ui.choosing:
 			var kind: String = queue.pop_front()
-			main.ui.show_choice(kind, choices())
+			main.ui.show_choice(kind, cards_for(kind))
 
 func _ring_pos(dmin: float, dmax: float) -> Vector2:
 	var p: Vector3 = main.player.pos
@@ -594,9 +660,11 @@ func _spawn(dt: float) -> void:
 			boss_sized = true
 			var bi: int = en.boss_index()
 			if bi >= 0:
-				# a stronger build gets a shorter fight, but every build gets a fight
-				var secs := lerpf(60.0, 34.0, clampf((level - 24.0) / 20.0, 0.0, 1.0))
-				var remain := clampf(boss_taken / BOSS_PROBE * secs, 200.0 * level, 150000.0)
+				# The finale lasts about 70 seconds for any build. A build that barely touched her during the
+				# probe (kept away, or weak against one body) is measured by a share of what it does to the
+				# swarm instead, so staying back never shrinks her into a short fight.
+				var est := maxf(boss_taken / BOSS_PROBE, boss_recent * 0.22)
+				var remain := clampf(est * 62.0, 200.0 * level, 190000.0)
 				var frac: float = clampf(en.hp[bi] / en.maxhp[bi], 0.3, 1.0)
 				en.hp[bi] = remain
 				en.maxhp[bi] = remain / frac
@@ -690,6 +758,7 @@ func _spawn(dt: float) -> void:
 		if time - mark_time > 5.0:
 			recent = (stats.dealt - mark_dealt) / (time - mark_time)
 		var boss_hp := clampf(10000.0 + recent * 9.0, 14000.0, 120000.0)
+		boss_recent = recent
 		if main.bot_mode:
 			print("T BOSS hp=%d recent_dps=%d" % [int(boss_hp), int(recent)])
 		var qi: int = en.spawn(en.T_BOSS, p4.x, p4.y, false, boss_hp / float(en.TYPES[en.T_BOSS].hp))

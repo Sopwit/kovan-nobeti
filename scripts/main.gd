@@ -112,6 +112,15 @@ var debug_ui := "":
 			game.passives.cogalt = 2
 			game._recalc()
 			game.queue.append("chest")
+		elif v == "evochest":
+			ui.hold_choice = true
+			weapons.levels.ari = 4
+			weapons.levels.bomba = 3
+			game._recalc()
+			game.evo_chests = 1
+			game.open_chest()
+		elif v == "keys":
+			_debug_keys()
 		elif v == "pause":
 			toggle_pause()
 		elif v == "win":
@@ -120,6 +129,34 @@ var debug_ui := "":
 			player.hp = 0.0
 			player.alive = false
 			game.on_player_dead()
+# Test only: sends real key events through the input pipeline and prints what the game did with them.
+func _debug_press(key: int) -> void:
+	for down in [true, false]:
+		var e := InputEventKey.new()
+		e.physical_keycode = key
+		e.keycode = key
+		e.pressed = down
+		Input.parse_input_event(e)
+
+func _debug_keys() -> void:
+	ui.hold_choice = true
+	game.queue.append("level")
+	var steps := [[1.5, KEY_ESCAPE, "esc on cards"], [1.0, KEY_1, "1 under pause"], [1.0, KEY_ESCAPE, "esc again"], [1.0, KEY_1, "1 on cards"]]
+	for s in steps:
+		await get_tree().create_timer(s[0], true, false, true).timeout
+		_debug_press(s[1])
+		await get_tree().create_timer(0.3, true, false, true).timeout
+		print("T KEY %s: choosing=%s pause_panel=%s tree_paused=%s" % [s[2], ui.choosing, ui.pause_panel.visible, get_tree().paused])
+	player.hp = 0.0
+	player.alive = false
+	game.on_player_dead()
+	for s2 in [[4.5, KEY_SPACE, "space on end screen"], [1.0, KEY_ENTER, "enter on end screen"]]:
+		await get_tree().create_timer(s2[0], true, false, true).timeout
+		var before := state
+		_debug_press(s2[1])
+		await get_tree().create_timer(0.4, true, false, true).timeout
+		print("T KEY %s: state %d -> %d time=%.1f" % [s2[2], before, state, game.time])
+
 var debug_start := false:
 	set(v):
 		debug_start = v
@@ -327,7 +364,14 @@ func start_run() -> void:
 	capture_mouse()
 
 func toggle_pause() -> void:
-	if state != PLAY or ui.choosing or game.over:
+	if state != PLAY or game.over:
+		return
+	if ui.choosing:
+		# the card panel already holds the tree: the pause menu just opens over it and closes back to it
+		paused = not paused
+		ui.show_pause(paused)
+		if not paused:
+			save_settings()
 		return
 	paused = not paused
 	get_tree().paused = paused

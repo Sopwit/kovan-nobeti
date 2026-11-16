@@ -100,6 +100,7 @@ var bmm: MultiMesh
 # boss
 var boss_uid := -1
 var boss_state := 0
+var boss_raged := false
 var boss_t := 0.0
 var boss_dirx := 0.0
 var boss_dirz := 0.0
@@ -281,6 +282,7 @@ func spawn(t: int, x: float, z: float, is_elite := false, hp_mult := 1.0) -> int
 	if t == T_BOSS:
 		boss_uid = uid[i]
 		boss_state = 0
+		boss_raged = false
 		boss_t = 2.5
 		scl[i] = d.size
 		spd[i] = d.speed
@@ -720,8 +722,8 @@ func update(dt: float) -> void:
 			continue
 		m2.set_instance_transform(k2, Transform3D(bas, Vector3(px[i], yy + dig, pz[i])))
 		m2.set_instance_custom_data(k2, Color(maxf(0.0, flash[i]), phase[i], act, 0.0))
-		if t >= T_STAG and hp[i] < maxhp[i] * 0.5:
-			# a champion that is half down turns angry red
+		if (t >= T_STAG or t == T_BOSS) and hp[i] < maxhp[i] * 0.5:
+			# a champion or the queen that is half down turns angry red
 			m2.set_instance_color(k2, Color(1.0, 0.66, 0.6))
 		elif elite[i] == 1:
 			m2.set_instance_color(k2, Color(1.0, 0.72, 0.25))
@@ -976,13 +978,30 @@ func _boss_y() -> float:
 func _boss_update(i: int, dt: float, nx: float, nz: float, d: float) -> Vector2:
 	boss_t -= dt
 	var enraged := hp[i] < maxhp[i] * 0.5
+	if enraged and not boss_raged:
+		boss_raged = true
+		main.game.boss_rage(Vector3(px[i], 0, pz[i]))
 	match boss_state:
 		0:
 			tele_node.visible = false
 			if boss_t <= 0.0:
 				boss_attack_i += 1
-				var pick := boss_attack_i % 4
-				if pick == 1:
+				# the second half of the fight adds a fifth attack to the cycle
+				var pick := boss_attack_i % (5 if enraged else 4)
+				if pick == 4:
+					# venom rain: marked circles around the keeper and on the way they are running
+					var pv: Vector3 = main.player.vel
+					for k in 7:
+						var tx: float = main.player.pos.x + pv.x * 0.6 * float(k % 3) + (randf_range(-7.0, 7.0) if k > 0 else 0.0)
+						var tz: float = main.player.pos.z + pv.z * 0.6 * float(k % 3) + (randf_range(-7.0, 7.0) if k > 0 else 0.0)
+						var fly := 1.0 + 0.1 * k
+						main.fx.warn(tx, tz, LOB_R, fly)
+						lobs.append([tx, tz, fly, fly, px[i], pz[i], dmg[i] * 0.8])
+					flash[i] = 0.8
+					main.audio.play("spit", 0.0, 0.6)
+					main.game.hint("yagmur", "Zehir kırmızı dairelere düşer, dışına çık")
+					boss_t = 2.2
+				elif pick == 1:
 					boss_state = 1
 					boss_t = 0.9
 					boss_dirx = nx
