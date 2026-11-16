@@ -10,3 +10,5 @@ editor.sh
 .claude/
 # Working notes, not part of the game
 DERSLER.md
+override.cfg
+kaynak/

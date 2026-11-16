@@ -1,0 +1,54 @@
+is,model,kredi,job_id,durum
+stil karesi deneme 1,gpt_image_2_6 high 2k,2.75,645f96b2-c01c-4c57-8924-fa280f0ebd6d,basarisiz
+stil karesi deneme 2,gpt_image_2_6 high 2k,2.75,d49325a6-ccf7-4c09-8446-656a7758e2a8,basarisiz
+stil karesi deneme 3,gpt_image_2_6 high 2k,2.75,ce568a18-174c-4b46-b143-cd0558823c2f,basarisiz
+stil karesi A (secilen),gpt_image_2_6 high 2k,2.75,2f334e24-d86e-4b31-a722-f31d09b6a233,tamam
+stil karesi B (yedek model),gpt_image_2_5 sunburst high 2k,2.75,c3129aaf-b51f-4da0-a3b6-fade620a7abe,tamam kullanilmadi
+gorsel arici,gpt_image_2_6 high 2k,2.75,e4a93810-a72f-4537-be84-dcb2fc2f204b,tamam
+gorsel bocek,gpt_image_2_6 high 2k,2.75,81a99894-d937-44c3-b466-344b2f9ac2ce,tamam
+gorsel esekarisi,gpt_image_2_6 high 2k,2.75,00e4a3d9-59d3-4cfb-a59c-852401769b88,tamam
+gorsel gergedan,gpt_image_2_6 high 2k,2.75,3a60c14e-882f-4d75-acad-a639c7cbe4e8,tamam
+gorsel tukuren,gpt_image_2_6 high 2k,2.75,be820775-a09a-4e67-b597-30d0052713ed,tamam
+gorsel kralice,gpt_image_2_6 high 2k,2.75,f902dc0d-ea7b-4f9b-9c9f-ccb91663cbc0,tamam
+gorsel kovan,gpt_image_2_6 high 2k,2.75,e4ef4a89-d788-4518-a867-d06a8ca5a830,tamam
+gorsel sunak,gpt_image_2_6 high 2k,2.75,c62eb3da-1e2b-48d2-9065-e4e19295a687,tamam
+gorsel agac,gpt_image_2_6 high 2k,2.75,f9ef8450-9145-4253-be7f-34f66660e1d5,tamam
+gorsel kavanoz,gpt_image_2_6 high 2k,2.75,068e69d7-f8e7-45c6-a03f-695a863eb69d,tamam
+gorsel ikon sayfasi,gpt_image_2_6 high 2k,2.75,e8a2e5b2-a058-442e-8859-e3ab89218226,tamam
+3d arici iskeletli kosu klibi,image_to_3d,38,74f8dd7e-6029-4da5-803e-69c9e03569c4,
+3d bocek,hunyuan3d_v3 LowPoly,14,dc89dcd6-31f0-4299-819c-ba53ed84b261,
+3d kovan,hunyuan3d_v3 LowPoly,14,5d809fd2-61da-4216-8f6d-647d00d891e8,
+3d sunak,hunyuan3d_v3 LowPoly,14,3499739e-94b6-4f0d-9f0f-091f322b6df9,
+3d agac,hunyuan3d_v3 LowPoly,14,1875efcc-e2e3-4060-a2c0-9886cfdd4acc,
+3d kavanoz,hunyuan3d_v3 LowPoly,14,4a7e1e94-ea98-474b-bddc-243da49db824,
+3d esekarisi,hunyuan3d_v3 LowPoly,14,ac609cd7-682b-4ecb-b526-ecc3c71598d7,
+3d gergedan,hunyuan3d_v3 LowPoly,14,43353800-9bbd-4fa9-b4c4-2b5eb6a7ee19,
+3d tukuren,hunyuan3d_v3 LowPoly,14,216208a8-381b-4898-8606-1a7ff8e71e61,
+3d kralice,hunyuan3d_v3 LowPoly,14,fbb18f40-be1e-4f26-838c-b15564239f7f,
+muzik oyun 1 120s,elevenlabs_music_v2_5,17.44,09b501cc-1e8f-436e-b805-578350b26591,
+muzik oyun 2 120s,elevenlabs_music_v2_5,17.44,8c0f2143-2297-472b-80ed-bdcc6b28054e,
+muzik boss 96s,elevenlabs_music_v2_5,13.95,244974c1-7985-41cc-8676-2957233aa988,
+muzik menu 60s,elevenlabs_music_v2_5,8.72,3960c4bb-7ac6-4d7f-ab2b-02d50f951c6c,
+sfx shoot,mirelo_text_to_audio,0.5,765a8bae-771b-4d1b-afc0-779931fe2b8b,
+sfx hit,mirelo_text_to_audio,0.5,734c263c-176c-4f69-8ba9-6ad7f9ad4c8d,
+sfx kill,mirelo_text_to_audio,0.5,df53336d-edf8-42ee-a79a-790d8d740d3e,
+sfx gem,mirelo_text_to_audio,0.5,4459446a-dd16-4aaf-9407-2814855f336f,
+sfx levelup,mirelo_text_to_audio,0.5,a896119d-9a02-4819-94b5-547904bb1f98,
+sfx explosion,mirelo_text_to_audio,0.5,9201b2ba-e876-4da1-96d7-faf7b466fd4c,
+sfx zap,mirelo_text_to_audio,0.5,c4ade733-680f-42c7-afbc-4d13eb5b8fb1,
+sfx hurt,mirelo_text_to_audio,0.5,ee59f8c0-b9c0-431e-a866-f8d7fa7f514d,
+sfx jump,mirelo_text_to_audio,0.5,6948c85f-16bc-4163-ba2c-4527223090f7,
+sfx slide,mirelo_text_to_audio,0.5,7030ea1e-90a1-4fdf-94a2-d73e0e0baa47,
+sfx land,mirelo_text_to_audio,0.5,2c08f00e-829a-48fc-b10c-5b970d6687e0,
+sfx chest,mirelo_text_to_audio,0.5,35d82602-68c0-4461-b4a6-7347b7677e8f,
+sfx shrine,mirelo_text_to_audio,0.5,472b7450-e9f4-4786-bd96-10d709d61817,
+sfx boss_roar,mirelo_text_to_audio,0.5,4d840901-8088-4814-af4a-8b478e074be2,
+sfx boss_slam,mirelo_text_to_audio,0.5,988d3538-95a1-424d-bb52-083523fb0bf3,
+sfx click,mirelo_text_to_audio,0.5,f6768be4-e3a1-4d51-99fe-a5790d9695c5,
+sfx victory,mirelo_text_to_audio,0.5,3528b31a-f1ec-4421-aa79-9d730ac08083,
+sfx defeat,mirelo_text_to_audio,0.5,727d5ec0-f034-4226-8021-70ce18d01511,
+sfx spit,mirelo_text_to_audio,0.5,d3360a46-6e07-4abd-b95b-552a91db914a,
+sfx heal,mirelo_text_to_audio,0.5,85b32cb6-d9af-4b3f-943e-50edcc6b1abf,
+klip bekleme (Idle 0),3d_rigging,8,6c9108b7-e9f1-4791-8dd4-3e7a0fb30d6f,
+klip ziplama (Regular_Jump 466),3d_rigging,8,e5d3929a-91d5-46fb-8b3f-12bceb0eca0d,
+klip kayma (slide_light 516),3d_rigging,8,dea47c7c-1a70-4999-b5b5-e2dc9080a036,

@@ -1,0 +1,19 @@
+[remap]
+
+importer="csv_translation"
+type="Translation"
+uid="uid://bky4uarfemqw2"
+
+[deps]
+
+files=["res://kredi.model.translation", "res://kredi.kredi.translation", "res://kredi.job.translation", "res://kredi.durum.translation"]
+
+source_file="res://kredi.csv"
+dest_files=["res://kredi.model.translation", "res://kredi.kredi.translation", "res://kredi.job.translation", "res://kredi.durum.translation"]
+
+[params]
+
+compress=1
+delimiter=0
+unescape_keys=false
+unescape_translations=true
