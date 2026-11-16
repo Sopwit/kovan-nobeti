@@ -352,6 +352,11 @@ func update(dt: float) -> void:
 	blob.scale = Vector3(bs, 1, bs)
 	# close behind the keeper while the field is quiet, pulling back as the swarm thickens
 	var want_d := 11.0 + 3.0 * clampf(main.enemies.count / 170.0, 0.0, 1.0)
+	# a champion or the queen is a fight to watch whole: the camera gives them room
+	if main.enemies.boss_uid >= 0:
+		want_d += 3.0
+	elif main.enemies.champ_uid >= 0:
+		want_d += 1.5
 	# the opening wide shot closes in faster than the camera breathes with the crowd
 	cam_dist = lerpf(cam_dist, want_d, minf(1.0, dt * (2.2 if cam_dist > want_d + 1.5 else 0.8)))
 	_update_camera(dt)

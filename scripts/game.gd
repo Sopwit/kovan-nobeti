@@ -204,12 +204,12 @@ func choices() -> Array:
 		pool.append(u)
 		if u.kind == "w":
 			# a weapon already half way up is offered more often, so builds reach their evolution
-			weights.append((2.0 if l >= 3 else 1.5) if l > 0 else 1.3)
+			weights.append((1.7 if l >= 3 else 1.5) if l > 0 else 1.3)
 		else:
 			# so is the trait a carried weapon still needs for it
 			var pw := evo_partner(u.id)
 			var feeds: bool = pw != "" and main.weapons.levels[pw] > 0 and main.weapons.levels[pw] <= upg(pw).max and l < int(EVO[pw][1])
-			weights.append(2.2 if feeds else 1.0)
+			weights.append(1.6 if feeds else 1.0)
 	var out: Array = evos
 	while out.size() < 3 and not pool.is_empty():
 		var total := 0.0
@@ -682,7 +682,7 @@ func _spawn(dt: float) -> void:
 	if boss_alive:
 		target = 90
 	var faucet := 1.7 + minf(time, 300.0) * 0.04 + maxf(0.0, time - 300.0) * 0.03
-	var rate := clampf(float(target - en.count) / 3.0, faucet * 0.5, faucet * 1.6)
+	var rate := clampf(float(target - en.count) / 3.0, faucet * 0.5, faucet * 1.45)
 	spawn_acc += dt * rate
 	var hard_cap := int(target * 1.35)
 	var n := 0
