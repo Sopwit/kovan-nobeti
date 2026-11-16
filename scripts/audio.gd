@@ -8,6 +8,7 @@ const MUSIC := {
 	"menu": ["muzik_menu.mp3", -14.3],
 	"oyun1": ["muzik_oyun1.mp3", -14.3],
 	"oyun2": ["muzik_oyun2.mp3", -12.0],
+	"gece": ["muzik_gece.mp3", -13.3],
 	"boss": ["muzik_boss.mp3", -12.3],
 }
 # effect -> [measured loudness when looped back to back (LUFS), target loudness, minimum gap between plays (s)]

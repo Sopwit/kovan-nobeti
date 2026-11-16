@@ -24,10 +24,16 @@ var decal_t := PackedFloat32Array()
 var decal_life := PackedFloat32Array()
 var decal_col: Array[Color] = []
 var decal_i := 0
+# danger zones painted on the ground before an attack lands:
+# [x, z, radius (or half width), time left, total time, kind (0 circle, 1 lane), yaw, lane length]
+const WMAX := 48
+var warn_mm: MultiMesh
+var warns: Array = []
 
 func setup(m) -> void:
 	main = m
 	_build_decals()
+	_build_warns()
 	var pm := BoxMesh.new()
 	pm.size = Vector3(0.16, 0.16, 0.16)
 	var pmat := StandardMaterial3D.new()
@@ -143,6 +149,61 @@ void fragment() {
 	inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(inst)
 
+func _build_warns() -> void:
+	warn_mm = MultiMesh.new()
+	warn_mm.transform_format = MultiMesh.TRANSFORM_3D
+	warn_mm.use_custom_data = true
+	var q := QuadMesh.new()
+	q.size = Vector2(2, 2)
+	q.orientation = PlaneMesh.FACE_Y
+	var sh := Shader.new()
+	sh.code = """
+shader_type spatial;
+render_mode unshaded, depth_draw_never, shadows_disabled, cull_disabled;
+varying float prog;
+varying float kind;
+void vertex() { prog = INSTANCE_CUSTOM.x; kind = INSTANCE_CUSTOM.y; }
+void fragment() {
+	vec2 p = UV * 2.0 - 1.0;
+	float a;
+	if (kind < 0.5) {
+		// a circle that fills from the middle as the hit comes closer
+		float d = length(p);
+		float rim = smoothstep(0.86, 0.91, d) * (1.0 - smoothstep(0.96, 1.0, d));
+		float inside = 1.0 - smoothstep(0.96, 1.0, d);
+		a = max(rim * 0.9, inside * (0.14 + 0.3 * (1.0 - step(prog, d))));
+	} else {
+		// a lane that fills from the near end
+		vec2 q = abs(p);
+		float rim = max(smoothstep(0.86, 0.94, q.x), smoothstep(0.975, 0.99, q.y));
+		a = max(rim * 0.85, 0.12 + 0.3 * (1.0 - step(prog, p.y * 0.5 + 0.5)));
+	}
+	ALBEDO = vec3(1.0, 0.1, 0.08);
+	ALPHA = a;
+}
+"""
+	var m := ShaderMaterial.new()
+	m.shader = sh
+	q.material = m
+	warn_mm.mesh = q
+	warn_mm.instance_count = WMAX
+	warn_mm.visible_instance_count = 0
+	var inst := MultiMeshInstance3D.new()
+	inst.multimesh = warn_mm
+	inst.custom_aabb = AABB(Vector3(-200, -2, -200), Vector3(400, 6, 400))
+	inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(inst)
+
+# Marks where something is about to land, `life` seconds ahead.
+func warn(x: float, z: float, r: float, life: float) -> void:
+	if warns.size() < WMAX:
+		warns.append([x, z, r, life, life, 0, 0.0, 0.0])
+
+# The same for a charge: a lane that starts at (x, z) and runs `length` along yaw.
+func warn_lane(x: float, z: float, yaw: float, half_w: float, length: float, life: float) -> void:
+	if warns.size() < WMAX:
+		warns.append([x, z, half_w, life, life, 1, yaw, length])
+
 # A mark on the ground that fades out over `life` seconds.
 func splat(x: float, z: float, size: float, col: Color, life: float) -> void:
 	var k := decal_i
@@ -165,6 +226,8 @@ func reset() -> void:
 			decal_t[k] = 0.0
 			decal_mm.set_instance_color(k, Color(0, 0, 0, 0))
 	numbers.clear()
+	warns.clear()
+	warn_mm.visible_instance_count = 0
 	trauma = 0.0
 	hurt_a = 0.0
 	for b in booms:
@@ -243,6 +306,26 @@ func update(dt: float) -> void:
 				var c := decal_col[k]
 				c.a *= maxf(0.0, fade)
 				decal_mm.set_instance_color(k, c)
+	var wk := 0
+	var wkeep: Array = []
+	for w in warns:
+		w[3] -= dt
+		if w[3] <= 0.0:
+			continue
+		wkeep.append(w)
+		var wp: float = 1.0 - float(w[3]) / float(w[4])
+		var wy := 0.06 + 0.001 * wk
+		if w[5] == 0:
+			warn_mm.set_instance_transform(wk, Transform3D(Basis.from_scale(Vector3(w[2], 1.0, w[2])), Vector3(w[0], wy, w[1])))
+		else:
+			var wyaw: float = w[6]
+			var half: float = float(w[7]) * 0.5
+			var wb := Basis(Vector3.UP, wyaw).scaled_local(Vector3(w[2], 1.0, half))
+			warn_mm.set_instance_transform(wk, Transform3D(wb, Vector3(float(w[0]) + sin(wyaw) * half, wy, float(w[1]) + cos(wyaw) * half)))
+		warn_mm.set_instance_custom_data(wk, Color(wp, float(w[5]), 0.0, 0.0))
+		wk += 1
+	warns = wkeep
+	warn_mm.visible_instance_count = wk
 	var keep: Array = []
 	for n in numbers:
 		n.t += dt
@@ -277,7 +360,8 @@ func _draw_numbers() -> void:
 			size = 26
 			col = Color(1.0, 0.92, 0.6)
 		var pop := 1.0 + maxf(0.0, 0.12 - t) * 5.0
-		size = int(size * pop)
+		# sizes move in steps of four: every distinct size costs the font another glyph atlas
+		size = (int(size * pop) >> 2) << 2
 		col.a = clampf((0.7 - t) * 3.5, 0.0, 1.0)
 		var s := str(n.v)
 		var pos := Vector2(sp.x + n.ox - size * 0.3 * s.length(), sp.y - rise)

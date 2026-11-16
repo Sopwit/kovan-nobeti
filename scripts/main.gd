@@ -58,6 +58,11 @@ var debug_time := -1.0:
 			game.time = v
 			game.next_wave = (floor(v / 60.0) + 1.0) * 60.0
 			game.next_elite = v + 20.0
+			# champions whose time has clearly passed do not all turn up at once
+			game.champs_sent = 0
+			for ct in game.CHAMP_TIMES:
+				if v > ct + 5.0:
+					game.champs_sent += 1
 var debug_levels := 0:
 	set(v):
 		debug_levels = v

@@ -73,6 +73,8 @@ func update(dt: float) -> void:
 			goal_dir = (goal - p).normalized()
 		# the queen is fought by circling her inside weapon range
 		var bi: int = en.boss_index()
+		if bi < 0:
+			bi = en.champ_index()
 		if bi >= 0 and pl.hp > pl.max_hp * 0.35:
 			var tb := Vector2(en.px[bi], en.pz[bi]) - p
 			var bd := tb.length()
@@ -93,8 +95,10 @@ func update(dt: float) -> void:
 				var l: float = maxf(0.5, q.distance_to(e) - en.rad[i])
 				var l0: float = maxf(0.4, q0.distance_to(e) - en.rad[i])
 				var w := 1.0 / (l * l) + 0.6 / (l0 * l0)
-				if en.typ[i] == en.T_BOSS:
+				if en.typ[i] == en.T_BOSS or en.typ[i] >= en.T_STAG:
 					w *= 3.0
+				elif en.typ[i] == en.T_BOOM:
+					w *= 2.5
 				danger += w
 				# how much of the crowd lies ahead on this heading: keeps the bot kiting toward open ground
 				var to := e - p
@@ -107,6 +111,23 @@ func update(dt: float) -> void:
 			var far: float = (p + dir * 6.0).length() - (float(main.world.ARENA_R) - 20.0)
 			if far > 0.0:
 				s -= far * 0.5
+			# marked ground is about to be hit: stay out of circles and lanes
+			for wz in main.fx.warns:
+				var wc := Vector2(wz[0], wz[1])
+				var wd := 0.0
+				if wz[5] == 0:
+					wd = minf(q.distance_to(wc), q0.distance_to(wc)) - float(wz[2])
+				else:
+					var wdir := Vector2(sin(wz[6]), cos(wz[6]))
+					var along := clampf((q - wc).dot(wdir), 0.0, float(wz[7]))
+					wd = q.distance_to(wc + wdir * along) - float(wz[2])
+				if wd < 1.0:
+					s -= 5.0 * (1.0 - wd)
+			# the great hive is a wall too: do not run into its trunk
+			var gh: Vector3 = main.world.GREAT
+			var into: float = gh.z + 2.5 - (p + dir * 4.0).distance_to(Vector2(gh.x, gh.y))
+			if into > 0.0:
+				s -= into * 1.2
 			if s > best_s:
 				best_s = s
 				best_dir = dir

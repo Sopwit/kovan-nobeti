@@ -77,7 +77,8 @@ func setup(m) -> void:
 	add_child(blob)
 
 func reset() -> void:
-	pos = Vector3.ZERO
+	# in front of the great hive, on the plaza
+	pos = Vector3(0, 0, 10.0)
 	vel = Vector3.ZERO
 	hp = 100.0
 	max_hp = 100.0
@@ -100,6 +101,7 @@ func reset() -> void:
 	cam_pitch = -0.44
 	cam_dist = 6.8
 	look_shift = 0.0
+	focus_t = 0.0
 	facing = 0.0
 	model_tilt = 0.0
 	_play("idle")
@@ -164,6 +166,14 @@ func buffer_input() -> void:
 		slide_buf = 0.14
 
 # Camera only, for frames where the simulation is frozen.
+# For a staged moment the camera turns to a point in the world and narrows; the keeper stays in control.
+var focus_pos := Vector3.ZERO
+var focus_t := 0.0
+
+func focus_on(p: Vector3, secs: float) -> void:
+	focus_pos = p
+	focus_t = secs
+
 func hold_camera(dt: float) -> void:
 	_update_camera(dt)
 
@@ -326,7 +336,18 @@ func _slide_damage() -> void:
 func _update_camera(dt: float) -> void:
 	var sh: Vector3 = main.fx.shake_offset()
 	var spd := Vector3(vel.x, 0, vel.z).length()
+	var focus := 0.0
+	if focus_t > 0.0 and dt < 1.0:
+		var real := dt / maxf(0.05, Engine.time_scale)
+		focus_t -= real
+		focus = clampf(focus_t * 1.5, 0.0, 1.0)
+		var to := focus_pos - pos
+		if Vector2(to.x, to.z).length() > 1.5:
+			cam_yaw = lerp_angle(cam_yaw, atan2(-to.x, -to.z), minf(1.0, real * 4.0 * focus))
+			cam_pitch = lerpf(cam_pitch, -0.22, minf(1.0, real * 3.0 * focus))
 	var target := pos + Vector3(0, 1.7, 0) + Vector3(cos(cam_yaw), 0, -sin(cam_yaw)) * look_shift
+	if focus > 0.0:
+		target = target.lerp(focus_pos + Vector3(0, 2.5, 0), 0.3 * focus)
 	var back := Vector3(sin(cam_yaw) * cos(cam_pitch), -sin(cam_pitch), cos(cam_yaw) * cos(cam_pitch))
 	var want := target + back * cam_dist
 	want.y = maxf(want.y, 0.6)
@@ -334,5 +355,5 @@ func _update_camera(dt: float) -> void:
 	cam.look_at(target + Vector3(0, 0.3, 0), Vector3.UP)
 	cam.h_offset = sh.x
 	cam.v_offset = sh.y
-	var fov_t := 68.0 + clampf((spd - 8.0) * 1.1, 0.0, 12.0)
+	var fov_t := 68.0 + clampf((spd - 8.0) * 1.1, 0.0, 12.0) - 14.0 * focus
 	cam.fov = lerpf(cam.fov, fov_t, minf(1.0, dt * 6.0))

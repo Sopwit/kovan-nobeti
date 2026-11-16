@@ -6,9 +6,10 @@ const MODEL_DIR := "res://assets/models/"
 const NORM := {
 	"bocek": ["w", 0.0], "esekarisi": ["w", 90.0], "gergedan": ["w", 0.0], "tukuren": ["w", 0.0], "kralice": ["w", 0.0],
 	"kovan": ["h", 0.0], "sunak": ["h", 0.0], "agac": ["h", 0.0], "kavanoz": ["h", 0.0],
+	"makas": ["w", 90.0], "akrep": ["w", 0.0], "patlak": ["w", 0.0], "cekirge": ["w", 0.0], "anakovan": ["h", 0.0],
 }
 # how much each generated texture is darkened (1 = as is)
-const GRADE := {"bocek": 1.7, "esekarisi": 1.15, "gergedan": 1.25, "tukuren": 1.15, "kralice": 1.2}
+const GRADE := {"bocek": 1.7, "esekarisi": 1.15, "gergedan": 1.25, "tukuren": 1.15, "kralice": 1.2, "patlak": 1.15, "cekirge": 1.15, "makas": 1.15, "akrep": 1.2}
 # shader motion per model: leg height, leg swing, stride speed, wing start (distance from the body axis),
 # wing height, wing swing. Unit model space.
 const ANIM_KEYS := ["leg_h", "leg_amp", "stride", "wing_x", "wing_y", "wing_amp"]
@@ -18,6 +19,10 @@ const ANIM := {
 	"gergedan": [0.16, 0.06, 8.0, 0.0, 0.0, 1.0],
 	"tukuren": [0.14, 0.07, 9.0, 0.0, 0.0, 1.0],
 	"kralice": [0.14, 0.04, 6.0, 0.0, 0.0, 1.0],
+	"patlak": [0.14, 0.06, 16.0, 0.0, 0.0, 1.0],
+	"cekirge": [0.18, 0.06, 10.0, 0.0, 0.0, 1.0],
+	"makas": [0.1, 0.035, 9.0, 0.0, 0.0, 1.0],
+	"akrep": [0.1, 0.035, 9.0, 0.0, 0.0, 1.0],
 }
 const FALLBACK_COL := {
 	"bocek": Color(0.5, 0.2, 0.7), "esekarisi": Color(0.9, 0.2, 0.2), "gergedan": Color(0.3, 0.25, 0.7),
@@ -32,6 +37,7 @@ var _aura_shader: Shader
 var _blob: Texture2D
 var icon_sheet: Texture2D
 var retarget_info := {}
+var enemy_mats: Array = []
 
 func _init() -> void:
 	enemy_shader = Shader.new()
@@ -50,6 +56,7 @@ uniform float stride = 11.0;
 uniform float wing_x = 0.0;
 uniform float wing_y = 0.0;
 uniform float wing_amp = 1.0;
+uniform float night = 0.0;
 varying float fl;
 const float BAYER[16] = float[](0.0, 8.0, 2.0, 10.0, 12.0, 4.0, 14.0, 6.0, 3.0, 11.0, 1.0, 9.0, 15.0, 7.0, 13.0, 5.0);
 void vertex() {
@@ -83,7 +90,9 @@ void fragment() {
 	float l = dot(c, vec3(0.3, 0.6, 0.1));
 	c = mix(vec3(l), c, 1.0 + (grade - 1.0) * 0.5) * COLOR.rgb;
 	ALBEDO = mix(c, vec3(1.0), fl * 0.6);
-	EMISSION = vec3(1.0, 0.9, 0.7) * fl * 0.5;
+	// after dark a cool rim keeps every body readable against the ground
+	float rim = pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), 2.5);
+	EMISSION = vec3(1.0, 0.9, 0.7) * fl * 0.5 + vec3(0.45, 0.62, 1.0) * rim * night * 0.5;
 	ROUGHNESS = 0.8;
 }
 """
@@ -198,10 +207,44 @@ func enemy_material(key: String) -> ShaderMaterial:
 	else:
 		m.set_shader_parameter("use_tex", 0.0)
 		m.set_shader_parameter("tint", FALLBACK_COL.get(key, Color.WHITE))
+	enemy_mats.append(m)
 	return m
+
+func set_night(v: float) -> void:
+	for m in enemy_mats:
+		m.set_shader_parameter("night", v)
 
 func prop_mesh(key: String) -> Mesh:
 	return _mesh(key)
+
+# The great hive tree: its honeycomb glows by itself (found by colour in the texture) and brighter at night.
+func great_hive_material() -> ShaderMaterial:
+	_mesh("anakovan")
+	var sh := Shader.new()
+	sh.code = """
+shader_type spatial;
+uniform sampler2D tex : source_color, filter_linear_mipmap;
+uniform float night = 0.0;
+const float BAYER[16] = float[](0.0, 8.0, 2.0, 10.0, 12.0, 4.0, 14.0, 6.0, 3.0, 11.0, 1.0, 9.0, 15.0, 7.0, 13.0, 5.0);
+void fragment() {
+	// whatever comes between the camera and the keeper dissolves
+	float near = smoothstep(3.0, 9.0, length(VERTEX));
+	int bx = int(FRAGCOORD.x) % 4;
+	int by = int(FRAGCOORD.y) % 4;
+	if (near < (BAYER[bx + by * 4] + 0.5) / 16.0) { discard; }
+	vec3 c = texture(tex, UV).rgb;
+	float gr = c.g / max(c.r, 0.01);
+	float honey = smoothstep(0.34, 0.46, gr) * (1.0 - smoothstep(0.75, 0.95, gr)) * smoothstep(0.3, 0.5, c.r);
+	ALBEDO = c;
+	EMISSION = c * honey * (0.3 + night * 1.7);
+	ROUGHNESS = 0.85;
+}
+"""
+	var m := ShaderMaterial.new()
+	m.shader = sh
+	if textures.has("anakovan"):
+		m.set_shader_parameter("tex", textures["anakovan"])
+	return m
 
 func prop_material(key: String, fade_near := false) -> StandardMaterial3D:
 	_mesh(key)

@@ -32,6 +32,10 @@ var choice_lock := 0.0
 var bot_t := 0.0
 var toast_text := ""
 var toast_t := 0.0
+# a big announcement with a line under it: champions, the queen
+var banner_title := ""
+var banner_sub := ""
+var banner_t := 0.0
 var icons := {}
 var sliders := {}
 var hint_t := 0.0
@@ -141,6 +145,12 @@ func fmt_int(v: float) -> String:
 		if left > 0 and left % 3 == 0:
 			out += "."
 	return out
+
+func banner(title: String, sub: String) -> void:
+	banner_title = title
+	banner_sub = sub
+	banner_t = 3.0
+	toast_t = 0.0
 
 func toast(t: String) -> void:
 	toast_text = t
@@ -593,6 +603,8 @@ func _process(dt: float) -> void:
 	if not get_tree().paused:
 		if toast_t > 0.0:
 			toast_t -= dt
+		if banner_t > 0.0:
+			banner_t -= dt
 		hint_t -= dt
 	if hud.visible:
 		hud.queue_redraw()
@@ -628,6 +640,11 @@ func start_hud() -> void:
 	toast_t = 0.0
 
 func _text(c: CanvasItem, pos: Vector2, s: String, size: int, col: Color, align := HORIZONTAL_ALIGNMENT_LEFT, width := -1.0) -> void:
+	# every distinct size makes the font build another glyph atlas, so animated sizes move in coarse steps
+	if size > 80:
+		size = (size >> 3) << 3
+	elif size > 40:
+		size = (size >> 2) << 2
 	c.draw_string_outline(font_bold, pos, s, align, width, size, maxi(4, size / 5), Color(0.05, 0.04, 0.1, col.a))
 	c.draw_string(font_bold, pos, s, align, width, size, col)
 
@@ -648,10 +665,15 @@ func _draw_hud() -> void:
 	_text(hud, Vector2(24, 100), "%s böcek" % fmt_int(g.kills), 26, Color(0.85, 0.88, 1.0))
 	# clock or boss bar
 	var b: int = en.boss_index()
+	var ch: int = en.champ_index()
 	if b >= 0:
 		_text(hud, Vector2(W * 0.5 - 300, 62), "KRALİÇE", 36, Color(1.0, 0.35, 0.3), HORIZONTAL_ALIGNMENT_CENTER, 600)
 		_bar(hud, Rect2(W * 0.5 - 360, 78, 720, 22), en.hp[b] / en.maxhp[b], Color(0.9, 0.15, 0.2))
 	else:
+		if ch >= 0:
+			# a champion's bar sits under the clock, the countdown to the queen keeps running
+			_text(hud, Vector2(W * 0.5 - 300, 132), g.CHAMP_NAMES[en.typ[ch] - en.T_STAG], 28, Color(1.0, 0.6, 0.3), HORIZONTAL_ALIGNMENT_CENTER, 600)
+			_bar(hud, Rect2(W * 0.5 - 260, 144, 520, 16), en.hp[ch] / en.maxhp[ch], Color(0.95, 0.45, 0.15))
 		var left: float = g.BOSS_TIME - g.time
 		var col := CREAM if left > 30.0 else Color(1.0, 0.45, 0.35)
 		var secs := int(ceil(maxf(0.0, left)))
@@ -692,7 +714,13 @@ func _draw_hud() -> void:
 	if main.world.shrine_progress >= 0.0:
 		_text(hud, Vector2(W * 0.5 - 200, H * 0.70), "Sunak uyanıyor", 26, TEAL, HORIZONTAL_ALIGNMENT_CENTER, 400)
 		_bar(hud, Rect2(W * 0.5 - 170, H * 0.70 + 12, 340, 14), main.world.shrine_progress, TEAL)
-	if toast_t > 0.0 and not choosing:
+	if banner_t > 0.0 and not choosing:
+		var ba := clampf(banner_t * 1.5, 0.0, 1.0) * clampf((3.0 - banner_t) * 6.0, 0.0, 1.0)
+		var grow := 1.0 + maxf(0.0, banner_t - 2.7) * 2.0
+		hud.draw_rect(Rect2(0, H * 0.3 - 86, W, 150), Color(0.03, 0.02, 0.08, 0.5 * ba))
+		_text(hud, Vector2(W * 0.5 - 800, H * 0.3), banner_title, int(92 * grow), Color(1.0, 0.42, 0.25, ba), HORIZONTAL_ALIGNMENT_CENTER, 1600)
+		_text(hud, Vector2(W * 0.5 - 600, H * 0.3 + 46), banner_sub, 30, Color(1.0, 0.9, 0.7, ba), HORIZONTAL_ALIGNMENT_CENTER, 1200)
+	elif toast_t > 0.0 and not choosing:
 		var a := clampf(toast_t * 2.0, 0.0, 1.0)
 		var pop := 1.0 + maxf(0.0, toast_t - 2.4) * 1.5
 		_text(hud, Vector2(W * 0.5 - 600, H * 0.27), toast_text, int(46 * pop), Color(1.0, 0.9, 0.5, a), HORIZONTAL_ALIGNMENT_CENTER, 1200)
@@ -721,8 +749,8 @@ func _draw_minimap(W: float) -> void:
 		hud.draw_circle(c + Vector2(it.pos.x, it.pos.z) * sc, 5.0, AMBER if it.kind == "chest" else (Color(1.0, 0.45, 0.5) if it.kind == "heal" else Color(0.3, 0.8, 1.0)))
 	var en = main.enemies
 	for i in en.count:
-		if en.dead[i] == 0 and (en.elite[i] == 1 or en.typ[i] == en.T_BOSS):
-			hud.draw_circle(c + Vector2(en.px[i], en.pz[i]) * sc, 8.0 if en.typ[i] == en.T_BOSS else 5.0, Color(1.0, 0.2, 0.2))
+		if en.dead[i] == 0 and (en.elite[i] == 1 or en.typ[i] == en.T_BOSS or en.typ[i] >= en.T_STAG):
+			hud.draw_circle(c + Vector2(en.px[i], en.pz[i]) * sc, 5.0 if en.elite[i] == 1 else 8.0, Color(1.0, 0.2, 0.2))
 	var pp: Vector2 = c + Vector2(main.player.pos.x, main.player.pos.z) * sc
 	var yaw: float = main.player.cam_yaw
 	var f := Vector2(-sin(yaw), -cos(yaw))

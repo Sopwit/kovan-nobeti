@@ -56,7 +56,7 @@ func _ready() -> void:
 	hero_root = Node3D.new()
 	add_child(hero_root)
 	# models in a second row, facing +Z like the game expects
-	var keys: Array[String] = ["bocek", "esekarisi", "gergedan", "tukuren", "kralice", "kovan", "sunak", "agac", "kavanoz"]
+	var keys: Array[String] = ["bocek", "esekarisi", "gergedan", "tukuren", "kralice", "makas", "akrep", "patlak", "cekirge"]
 	for i in keys.size():
 		var mi := MeshInstance3D.new()
 		mi.mesh = assets.prop_mesh(keys[i])

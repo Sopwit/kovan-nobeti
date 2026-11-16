@@ -52,15 +52,15 @@ sfx heal,mirelo_text_to_audio,0.5,85b32cb6-d9af-4b3f-943e-50edcc6b1abf,tamam
 klip bekleme (Idle 0),3d_rigging,8,6c9108b7-e9f1-4791-8dd4-3e7a0fb30d6f,tamam
 klip ziplama (Regular_Jump 466),3d_rigging,8,e5d3929a-91d5-46fb-8b3f-12bceb0eca0d,tamam
 klip kayma (slide_light 516),3d_rigging,8,dea47c7c-1a70-4999-b5b5-e2dc9080a036,tamam
-asama2 gorsel ana kovan,gpt_image_2_6 high 2k,2.75,afb59a9c-acc2-4dd7-9b5a-310392783ed9,
-asama2 gorsel makas (ara boss),gpt_image_2_6 high 2k,2.75,9335ca5c-79a9-45e0-9694-482aef5afae8,
-asama2 gorsel akrep (ara boss),gpt_image_2_6 high 2k,2.75,490cac27-4114-4c46-ad5c-fecbf47455b2,
-asama2 gorsel patlak,gpt_image_2_6 high 2k,2.75,15efa19f-cd5e-4d28-b0cd-ca5fb191bb3b,
-asama2 gorsel cekirge,gpt_image_2_6 high 2k,2.75,20fcfdde-54ad-4fe0-a7de-354618e669b3,
-asama2 gorsel ikon sayfasi 2,gpt_image_2_6 high 2k,2.75,69d01c84-f9c6-4646-84a2-584c3150a0d0,
-asama2 3d ana kovan,hunyuan3d_v3 LowPoly,14,7ca11264-ae3b-4e52-870a-3eb4449d25f4,
-asama2 3d makas,hunyuan3d_v3 LowPoly,14,7614db33-8879-4a7a-91ec-fb7683c353a0,
-asama2 3d akrep,hunyuan3d_v3 LowPoly,14,eed07cf4-fe7b-4a1d-b4ba-83cdfb051074,
-asama2 3d patlak,hunyuan3d_v3 LowPoly,14,09cb18e3-ff35-4826-a6ca-8c6d9220605b,
-asama2 3d cekirge,hunyuan3d_v3 LowPoly,14,76eb44ca-0584-4826-a016-a860461bb718,
-asama2 muzik gece 120s,elevenlabs_music_v2_5,17.44,59416838-c2a9-409b-a8c4-793100e71a4b,
+asama2 gorsel ana kovan,gpt_image_2_6 high 2k,2.75,afb59a9c-acc2-4dd7-9b5a-310392783ed9,tamam
+asama2 gorsel makas (ara boss),gpt_image_2_6 high 2k,2.75,9335ca5c-79a9-45e0-9694-482aef5afae8,tamam
+asama2 gorsel akrep (ara boss),gpt_image_2_6 high 2k,2.75,490cac27-4114-4c46-ad5c-fecbf47455b2,tamam
+asama2 gorsel patlak,gpt_image_2_6 high 2k,2.75,15efa19f-cd5e-4d28-b0cd-ca5fb191bb3b,tamam
+asama2 gorsel cekirge,gpt_image_2_6 high 2k,2.75,20fcfdde-54ad-4fe0-a7de-354618e669b3,tamam
+asama2 gorsel ikon sayfasi 2,gpt_image_2_6 high 2k,2.75,69d01c84-f9c6-4646-84a2-584c3150a0d0,tamam
+asama2 3d ana kovan,hunyuan3d_v3 LowPoly,14,7ca11264-ae3b-4e52-870a-3eb4449d25f4,tamam
+asama2 3d makas,hunyuan3d_v3 LowPoly,14,7614db33-8879-4a7a-91ec-fb7683c353a0,tamam
+asama2 3d akrep,hunyuan3d_v3 LowPoly,14,eed07cf4-fe7b-4a1d-b4ba-83cdfb051074,tamam
+asama2 3d patlak,hunyuan3d_v3 LowPoly,14,09cb18e3-ff35-4826-a6ca-8c6d9220605b,tamam
+asama2 3d cekirge,hunyuan3d_v3 LowPoly,14,76eb44ca-0584-4826-a016-a860461bb718,tamam
+asama2 muzik gece 120s,elevenlabs_music_v2_5,17.44,59416838-c2a9-409b-a8c4-793100e71a4b,tamam

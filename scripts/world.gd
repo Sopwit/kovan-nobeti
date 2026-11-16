@@ -16,6 +16,36 @@ var poi_root: Node3D
 var shrine_progress := -1.0
 var time := 0.0
 var rng := RandomNumberGenerator.new()
+var sun: DirectionalLight3D
+var moon: DirectionalLight3D
+var lantern: OmniLight3D
+var sky_mat: ProceduralSkyMaterial
+var ground_mat: ShaderMaterial
+var deco_hive_mat: StandardMaterial3D
+var cloud_mat: StandardMaterial3D
+var cloud_root: Node3D
+var firefly_mat: ShaderMaterial
+var fireflies: MultiMeshInstance3D
+var flora_mats: Array = []
+var great_mat: ShaderMaterial
+var great_light: OmniLight3D
+# the great hive tree in the middle: Vector3(x, z, trunk radius)
+const GREAT := Vector3(0.0, 0.0, 5.0)
+# time of day last applied (0 afternoon .. 1 night) and how much of the night has fallen
+var day := -1.0
+var night := 0.0
+
+# The day runs from afternoon through sunset into a moonlit night while the run goes on.
+# Each row: time, sun height (degrees), sun yaw, sun colour, sun energy, sky top, horizon, ambient colour,
+# ambient energy, fog colour, night amount.
+const DAY := [
+	[0.00, 54.0, 38.0, Color(1.0, 0.96, 0.86), 1.15, Color(0.20, 0.48, 0.95), Color(0.70, 0.86, 1.0), Color(0.78, 0.86, 1.0), 0.5, Color(0.72, 0.86, 1.0), 0.0],
+	[0.33, 38.0, 62.0, Color(1.0, 0.92, 0.74), 1.15, Color(0.20, 0.45, 0.92), Color(0.80, 0.86, 0.92), Color(0.82, 0.85, 0.95), 0.5, Color(0.80, 0.86, 0.95), 0.0],
+	[0.52, 17.0, 84.0, Color(1.0, 0.72, 0.42), 1.3, Color(0.22, 0.36, 0.78), Color(1.0, 0.72, 0.45), Color(0.95, 0.78, 0.70), 0.5, Color(1.0, 0.75, 0.55), 0.0],
+	[0.66, 6.0, 98.0, Color(1.0, 0.45, 0.28), 1.0, Color(0.16, 0.18, 0.50), Color(0.95, 0.45, 0.35), Color(0.75, 0.60, 0.85), 0.6, Color(0.80, 0.50, 0.55), 0.35],
+	[0.76, -5.0, 106.0, Color(1.0, 0.40, 0.30), 0.0, Color(0.06, 0.08, 0.28), Color(0.40, 0.30, 0.55), Color(0.50, 0.55, 0.95), 0.7, Color(0.30, 0.30, 0.55), 0.85],
+	[1.00, -20.0, 120.0, Color(1.0, 0.40, 0.30), 0.0, Color(0.03, 0.05, 0.20), Color(0.16, 0.22, 0.45), Color(0.50, 0.60, 1.0), 0.68, Color(0.14, 0.20, 0.42), 1.0],
+]
 
 func setup(m) -> void:
 	main = m
@@ -30,16 +60,31 @@ func _build_environment() -> void:
 	var we := WorldEnvironment.new()
 	env = Environment.new()
 	var sky := Sky.new()
-	var sm := ProceduralSkyMaterial.new()
-	sm.sky_top_color = Color(0.22, 0.5, 0.95)
-	sm.sky_horizon_color = Color(0.72, 0.87, 1.0)
-	sm.ground_horizon_color = Color(0.6, 0.8, 0.7)
-	sm.ground_bottom_color = Color(0.35, 0.55, 0.3)
-	sm.sun_angle_max = 12.0
-	sky.sky_material = sm
+	sky_mat = ProceduralSkyMaterial.new()
+	sky_mat.sky_top_color = Color(0.22, 0.5, 0.95)
+	sky_mat.sky_horizon_color = Color(0.72, 0.87, 1.0)
+	sky_mat.ground_horizon_color = Color(0.6, 0.8, 0.7)
+	sky_mat.ground_bottom_color = Color(0.35, 0.55, 0.3)
+	sky_mat.sun_angle_max = 12.0
+	# stars: a sparse dot map that the night fades in
+	var star_img := Image.create(1024, 512, false, Image.FORMAT_RGB8)
+	star_img.fill(Color.BLACK)
+	for i in 1500:
+		var sx := rng.randi_range(1, 1022)
+		var sy := rng.randi_range(1, 300)
+		var sb := rng.randf_range(0.25, 1.0)
+		star_img.set_pixel(sx, sy, Color(sb, sb, sb * 1.1))
+		if sb > 0.9:
+			star_img.set_pixel(sx + 1, sy, Color(sb, sb, sb) * 0.6)
+			star_img.set_pixel(sx, sy + 1, Color(sb, sb, sb) * 0.6)
+	sky_mat.sky_cover = ImageTexture.create_from_image(star_img)
+	sky_mat.sky_cover_modulate = Color.BLACK
+	sky.sky_material = sky_mat
 	env.background_mode = Environment.BG_SKY
 	env.sky = sky
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	# the sky changes all run long: without sky reflections nothing has to be re-filtered when it does
+	env.reflected_light_source = Environment.REFLECTION_SOURCE_DISABLED
 	env.ambient_light_color = Color(0.78, 0.86, 1.0)
 	env.ambient_light_energy = 0.5
 	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
@@ -58,7 +103,7 @@ func _build_environment() -> void:
 	env.adjustment_contrast = 1.06
 	we.environment = env
 	add_child(we)
-	var sun := DirectionalLight3D.new()
+	sun = DirectionalLight3D.new()
 	sun.rotation_degrees = Vector3(-52, 38, 0)
 	sun.light_color = Color(1.0, 0.96, 0.86)
 	sun.light_energy = 1.1
@@ -67,6 +112,78 @@ func _build_environment() -> void:
 	sun.directional_shadow_max_distance = 60.0
 	sun.shadow_opacity = 0.65
 	add_child(sun)
+	moon = DirectionalLight3D.new()
+	moon.rotation_degrees = Vector3(-56, -140, 0)
+	moon.light_color = Color(0.62, 0.76, 1.0)
+	moon.light_energy = 0.0
+	moon.shadow_enabled = true
+	moon.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
+	moon.directional_shadow_max_distance = 60.0
+	moon.shadow_opacity = 0.55
+	moon.visible = false
+	add_child(moon)
+	# the keeper's lantern: lit only at night, it keeps the fight around the player readable
+	lantern = OmniLight3D.new()
+	lantern.light_color = Color(1.0, 0.8, 0.5)
+	lantern.omni_range = 13.0
+	lantern.omni_attenuation = 1.3
+	lantern.light_energy = 0.0
+	lantern.shadow_enabled = false
+	lantern.visible = false
+	add_child(lantern)
+
+func _col(a: Array, b: Array, i: int, k: float) -> Color:
+	return (a[i] as Color).lerp(b[i] as Color, k)
+
+# f = 0 is the afternoon the run starts in, f = 1 the night the Queen arrives in.
+func set_daytime(f: float) -> void:
+	f = clampf(f, 0.0, 1.0)
+	if absf(f - day) < 0.0015:
+		return
+	day = f
+	var i := 0
+	while i < DAY.size() - 2 and f > float(DAY[i + 1][0]):
+		i += 1
+	var a: Array = DAY[i]
+	var b: Array = DAY[i + 1]
+	var k := clampf((f - float(a[0])) / (float(b[0]) - float(a[0])), 0.0, 1.0)
+	var elev := lerpf(a[1], b[1], k)
+	night = lerpf(a[10], b[10], k)
+	sun.rotation_degrees = Vector3(-elev, lerpf(a[2], b[2], k), 0)
+	sun.light_color = _col(a, b, 3, k)
+	sun.light_energy = lerpf(a[4], b[4], k) * smoothstep(-3.0, 4.0, elev)
+	sun.visible = sun.light_energy > 0.01
+	moon.light_energy = 0.7 * smoothstep(0.3, 0.9, night)
+	moon.visible = moon.light_energy > 0.01
+	var top := _col(a, b, 5, k)
+	var hor := _col(a, b, 6, k)
+	sky_mat.sky_top_color = top
+	sky_mat.sky_horizon_color = hor
+	sky_mat.ground_horizon_color = hor.lerp(Color(0.5, 0.75, 0.6), 0.45 * (1.0 - night))
+	sky_mat.ground_bottom_color = Color(0.35, 0.55, 0.3).lerp(top, 0.3 + 0.6 * night)
+	sky_mat.sky_cover_modulate = Color(night, night, night)
+	env.ambient_light_color = _col(a, b, 7, k)
+	env.ambient_light_energy = lerpf(a[8], b[8], k)
+	env.fog_light_color = _col(a, b, 9, k)
+	env.fog_density = lerpf(0.0007, 0.0015, night)
+	env.glow_intensity = lerpf(0.5, 0.72, night)
+	lantern.light_energy = 1.5 * night
+	lantern.visible = night > 0.02
+	if ground_mat != null:
+		ground_mat.set_shader_parameter("night", night)
+	for m in flora_mats:
+		m.set_shader_parameter("night", night)
+	if firefly_mat != null:
+		firefly_mat.set_shader_parameter("night", night)
+		fireflies.visible = night > 0.02
+	if cloud_mat != null:
+		cloud_mat.albedo_color = Color.WHITE.lerp(hor, 0.5) * lerpf(1.0, 0.34, night)
+	if deco_hive_mat != null:
+		deco_hive_mat.emission_energy_multiplier = 0.55 * night
+	if great_mat != null:
+		great_mat.set_shader_parameter("night", night)
+		great_light.light_energy = 0.4 + 2.4 * night
+	main.assets.set_night(night)
 
 func set_brightness(v: float) -> void:
 	env.adjustment_brightness = v
@@ -80,8 +197,23 @@ func _build_ground() -> void:
 	sh.code = """
 shader_type spatial;
 uniform float arena = 74.0;
+uniform float night = 0.0;
 varying vec3 wp;
+const vec2 HS = vec2(1.0, 1.7320508);
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float vnoise(vec2 p) {
+	vec2 i = floor(p);
+	vec2 f = fract(p);
+	f = f * f * (3.0 - 2.0 * f);
+	return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x), f.y);
+}
+float hexd(vec2 p) { p = abs(p); return max(dot(p, HS * 0.5), p.x); }
+// xy = offset from the centre of the hexagon this point lies in, zw = id of that hexagon
+vec4 hexc(vec2 p) {
+	vec4 hc = floor(vec4(p, p - vec2(0.5, 1.0)) / HS.xyxy) + 0.5;
+	vec4 h = vec4(p - hc.xy * HS, p - (hc.zw + 0.5) * HS);
+	return dot(h.xy, h.xy) < dot(h.zw, h.zw) ? vec4(h.xy, hc.xy) : vec4(h.zw, hc.zw + 0.5);
+}
 void vertex() { wp = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; }
 void fragment() {
 	vec2 p = vec2(wp.x * 0.30 + wp.z * 0.12, wp.z * 0.30 - wp.x * 0.07);
@@ -90,18 +222,37 @@ void fragment() {
 	float tri = step(f.x + f.y, 1.0);
 	float h = hash(c + vec2(tri * 7.3, tri * 1.7));
 	float big = hash(floor(wp.xz * 0.05 + 3.0));
-	vec3 col = mix(vec3(0.36, 0.63, 0.20), vec3(0.47, 0.73, 0.26), h);
-	col *= 0.93 + 0.12 * big;
+	// three kinds of grass in soft patches: deep clover, lush meadow, sun-dried
+	float n = vnoise(wp.xz * 0.045) * 0.65 + vnoise(wp.xz * 0.13 + 7.0) * 0.35;
+	vec3 deep = mix(vec3(0.20, 0.47, 0.20), vec3(0.27, 0.55, 0.22), h);
+	vec3 lush = mix(vec3(0.32, 0.60, 0.19), vec3(0.44, 0.71, 0.25), h);
+	vec3 dry = mix(vec3(0.55, 0.70, 0.27), vec3(0.65, 0.77, 0.32), h);
+	vec3 col = mix(deep, lush, smoothstep(0.28, 0.46, n));
+	col = mix(col, dry, smoothstep(0.62, 0.8, n));
+	col *= 0.94 + 0.1 * big;
 	float r = length(wp.xz);
+	// four trodden paths run out from the great hive (the same shape as paved() in the script)
+	float ang = atan(wp.z, wp.x) + sin(r * 0.19) * 0.1;
+	float da = abs(mod(ang + 0.7853982, 1.5707963) - 0.7853982) * r;
+	float path = (1.0 - smoothstep(1.1, 2.3, da + (h - 0.5) * 0.8)) * (1.0 - smoothstep(50.0, 64.0, r));
+	col = mix(col, mix(vec3(0.60, 0.47, 0.30), vec3(0.69, 0.56, 0.37), h), path);
+	// a honeycomb plaza around it: stone cells with honey in the seams, breaking up towards the rim
+	vec2 hp = wp.xz / 1.5;
+	vec4 hx = hexc(hp);
+	float seam = 1.0 - smoothstep(0.03, 0.07, 0.5 - hexd(hx.xy));
+	float keep = step(hash(hx.zw * 3.7 + 1.3), 1.0 - smoothstep(11.0, 16.5, length((hp - hx.xy) * 1.5)));
+	vec3 tile = mix(vec3(0.74, 0.62, 0.40), vec3(0.86, 0.73, 0.47), hash(hx.zw));
+	col = mix(col, mix(tile, vec3(0.95, 0.60, 0.10), seam), keep);
 	col = mix(col, vec3(0.27, 0.48, 0.19), smoothstep(arena - 3.0, arena + 4.0, r));
 	ALBEDO = pow(col, vec3(2.2));
+	EMISSION = vec3(1.0, 0.42, 0.03) * seam * keep * (0.1 + night * 1.4);
 	ROUGHNESS = 0.95;
 }
 """
-	var mat := ShaderMaterial.new()
-	mat.shader = sh
-	mat.set_shader_parameter("arena", ARENA_R)
-	g.material_override = mat
+	ground_mat = ShaderMaterial.new()
+	ground_mat.shader = sh
+	ground_mat.set_shader_parameter("arena", ARENA_R)
+	g.material_override = ground_mat
 	g.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(g)
 
@@ -128,18 +279,252 @@ func _free_spot(rmin: float, rmax: float, clearance: float) -> Vector2:
 		var a := rng.randf() * TAU
 		var r := sqrt(rng.randf_range(rmin * rmin, rmax * rmax))
 		var p := Vector2(cos(a) * r, sin(a) * r)
-		var ok := true
+		var ok := paved(p.x, p.y) < 0.2
 		for o in obstacles:
 			if Vector2(o.x, o.y).distance_to(p) < o.z + clearance:
 				ok = false
 				break
 		if ok:
 			return p
-	return Vector2(rmin, 0)
+	return Vector2(rmin, rmin)
+
+# 0..1: how much of this spot is paved or trodden (the plaza around the great hive and the four paths).
+# The ground shader draws the same shape.
+func paved(x: float, z: float) -> float:
+	var r := sqrt(x * x + z * z)
+	if r < 15.0:
+		return 1.0
+	if r > 64.0:
+		return 0.0
+	var ang := atan2(z, x) + sin(r * 0.19) * 0.1
+	var da := absf(fposmod(ang + PI * 0.25, PI * 0.5) - PI * 0.25) * r
+	return 1.0 - smoothstep(1.5, 2.8, da)
+
+func _spindle(st: SurfaceTool, y0: float, y1: float, r: float, sides: int, c0: Color, c1: Color) -> void:
+	var ym := lerpf(y0, y1, 0.4)
+	for s in sides:
+		var a0 := TAU * s / sides
+		var a1 := TAU * (s + 1) / sides
+		var p0 := Vector3(cos(a0) * r, ym, sin(a0) * r)
+		var p1 := Vector3(cos(a1) * r, ym, sin(a1) * r)
+		var cm := c0.lerp(c1, 0.4)
+		for v in [[Vector3(0, y0, 0), c0], [p0, cm], [p1, cm], [p0, cm], [Vector3(0, y1, 0), c1], [p1, cm]]:
+			st.set_color(v[1])
+			st.add_vertex(v[0])
+
+# Grass, flowers and lavender: colour and motion only, no collisions. One shader sways them in the wind
+# and bends them away from the keeper's feet.
+func _build_flora() -> void:
+	var sh := Shader.new()
+	sh.code = """
+shader_type spatial;
+render_mode cull_disabled, world_vertex_coords;
+uniform vec3 player = vec3(0.0, 100.0, 0.0);
+uniform float sway = 1.0;
+uniform float night = 0.0;
+uniform float glow = 0.0;
+varying vec3 vc;
+varying float gm;
+void vertex() {
+	vec3 o = MODEL_MATRIX[3].xyz;
+	float h = max(VERTEX.y, 0.0);
+	float w = sin(TIME * 1.7 + o.x * 0.35 + o.z * 0.27) * 0.6 + sin(TIME * 3.1 + o.x * 0.9 - o.z * 0.6) * 0.3;
+	vec2 away = o.xz - player.xz;
+	float d = length(away);
+	float press = (1.0 - smoothstep(0.4, 1.6, d)) * (1.0 - step(0.7, player.y));
+	vec2 off = vec2(0.2, 0.11) * w * sway + (away / max(d, 0.05)) * press * 0.9;
+	VERTEX.xz += off * h;
+	VERTEX.y -= dot(off, off) * h * 0.6;
+	NORMAL = vec3(0.0, 1.0, 0.0);
+	vc = COLOR.rgb;
+	gm = COLOR.a;
+}
+void fragment() {
+	vec3 c = pow(vc, vec3(2.2));
+	ALBEDO = c;
+	ROUGHNESS = 0.95;
+	EMISSION = c * glow * night * gm;
+}
+"""
+	var mats: Array = []
+	for cfg in [[1.0, 0.0], [0.75, 0.55], [0.75, 0.0]]:
+		var fm := ShaderMaterial.new()
+		fm.shader = sh
+		fm.set_shader_parameter("sway", cfg[0])
+		fm.set_shader_parameter("glow", cfg[1])
+		mats.append(fm)
+	flora_mats = mats
+	var grass_mat: ShaderMaterial = mats[0]
+	var bloom_mat: ShaderMaterial = mats[1]
+	var stem_mat: ShaderMaterial = mats[2]
+	# grass clump: three tapered blades leaning apart, darker at the root
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var shade := [0.7, 0.7, 0.86, 0.86, 1.0]
+	for k in 3:
+		var yaw := TAU * k / 3.0 + 0.4
+		var bb := Basis(Vector3.UP, yaw) * Basis(Vector3.RIGHT, 0.34)
+		var pts := [Vector3(-0.055, 0, 0), Vector3(0.055, 0, 0), Vector3(-0.035, 0.55, 0), Vector3(0.035, 0.55, 0), Vector3(0, 1.0, 0)]
+		for idx in [0, 1, 2, 1, 3, 2, 2, 3, 4]:
+			st.set_color(Color(shade[idx], shade[idx], shade[idx]))
+			st.add_vertex(bb * pts[idx] + Vector3(sin(yaw), 0, cos(yaw)) * 0.05)
+	var clump: ArrayMesh = st.commit()
+	var xfs: Array = []
+	var cols: Array = []
+	var tones := [Color(0.4, 0.7, 0.22), Color(0.52, 0.8, 0.28), Color(0.68, 0.84, 0.34)]
+	# loose tufts everywhere, plus thicker stands of tall grass
+	var spots: Array = []
+	for i in 9000:
+		var a3 := rng.randf() * TAU
+		var r3 := sqrt(rng.randf()) * (ARENA_R + 6.0)
+		spots.append(Vector3(cos(a3) * r3, rng.randf_range(0.3, 0.55), sin(a3) * r3))
+	for stand in 320:
+		var sa := rng.randf() * TAU
+		var sr := sqrt(rng.randf()) * (ARENA_R + 2.0)
+		for i in rng.randi_range(6, 12):
+			spots.append(Vector3(cos(sa) * sr + rng.randf_range(-1.5, 1.5), rng.randf_range(0.55, 0.9), sin(sa) * sr + rng.randf_range(-1.5, 1.5)))
+	for sp in spots:
+		if paved(sp.x, sp.z) > 0.15:
+			continue
+		var gs: float = sp.y
+		xfs.append(Transform3D(Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(gs * 1.3, gs, gs * 1.3)), Vector3(sp.x, 0, sp.z)))
+		cols.append((tones[rng.randi() % 3] as Color).lerp(tones[rng.randi() % 3], rng.randf()))
+	_mm(clump, grass_mat, xfs, cols, false)
+	# flowers: a thin stem and a flat head, in loose patches
+	var head := CylinderMesh.new()
+	head.top_radius = 0.12
+	head.bottom_radius = 0.05
+	head.height = 0.05
+	head.radial_segments = 6
+	head.rings = 1
+	var stem := BoxMesh.new()
+	stem.size = Vector3(0.03, 1.0, 0.03)
+	xfs = []
+	cols = []
+	var stems: Array = []
+	var stem_cols: Array = []
+	var palette := [Color(1, 1, 0.95), Color(1.0, 0.85, 0.2), Color(0.66, 0.42, 0.9), Color(1.0, 0.6, 0.75), Color(1.0, 0.45, 0.3)]
+	for patch in 230:
+		var ca := rng.randf() * TAU
+		var cr := sqrt(rng.randf()) * (ARENA_R + 4.0)
+		var centre := Vector2(cos(ca) * cr, sin(ca) * cr)
+		var col: Color = palette[rng.randi() % palette.size()]
+		for i in rng.randi_range(5, 13):
+			var p4 := centre + Vector2(rng.randf_range(-1.8, 1.8), rng.randf_range(-1.8, 1.8))
+			if paved(p4.x, p4.y) > 0.15:
+				continue
+			var h4 := rng.randf_range(0.22, 0.48)
+			var s4 := rng.randf_range(0.9, 1.5)
+			var tilt := Basis(Vector3.UP, rng.randf() * TAU) * Basis(Vector3.RIGHT, rng.randf_range(-0.35, 0.35))
+			xfs.append(Transform3D(tilt.scaled(Vector3(s4, s4, s4)), Vector3(p4.x, h4, p4.y)))
+			stems.append(Transform3D(Basis.from_scale(Vector3(1, h4, 1)), Vector3(p4.x, h4 * 0.5, p4.y)))
+			cols.append(col.lerp(Color.WHITE, rng.randf() * 0.2))
+			stem_cols.append(Color(0.25, 0.5, 0.16))
+	_mm(head, bloom_mat, xfs, cols, false)
+	_mm(stem, stem_mat, stems, stem_cols, false)
+	# lavender: beds of purple spikes that follow a gentle curve, the way they are planted
+	st = SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	_spindle(st, 0.0, 0.62, 0.022, 3, Color(0.24, 0.46, 0.2, 0.0), Color(0.36, 0.56, 0.26, 0.0))
+	_spindle(st, 0.5, 1.0, 0.075, 4, Color(0.5, 0.32, 0.86, 1.0), Color(0.74, 0.56, 1.0, 1.0))
+	var spike: ArrayMesh = st.commit()
+	xfs = []
+	cols = []
+	for bed in 26:
+		var ba := rng.randf() * TAU
+		var br := rng.randf_range(17.0, ARENA_R - 2.0)
+		var at := Vector2(cos(ba) * br, sin(ba) * br)
+		var dir := rng.randf() * TAU
+		var bend := rng.randf_range(-0.12, 0.12)
+		for bush in rng.randi_range(7, 14):
+			at += Vector2(cos(dir), sin(dir)) * 1.05
+			dir += bend
+			if paved(at.x, at.y) > 0.15 or at.length() > ARENA_R + 3.0:
+				continue
+			var tint := Color(1, 1, 1).lerp(Color(1.0, 0.8, 0.95), rng.randf())
+			for sp2 in rng.randi_range(6, 9):
+				var lean := Basis(Vector3.UP, rng.randf() * TAU) * Basis(Vector3.RIGHT, rng.randf_range(0.05, 0.5))
+				var ls := rng.randf_range(0.75, 1.15)
+				xfs.append(Transform3D(lean.scaled(Vector3(ls, ls, ls)), Vector3(at.x + rng.randf_range(-0.18, 0.18), 0, at.y + rng.randf_range(-0.18, 0.18))))
+				cols.append(tint)
+	_mm(spike, bloom_mat, xfs, cols, false)
+
+# Clouds that drift and take the colour of the hour, and fireflies that come out at night.
+func _build_sky_life() -> void:
+	var puff := SphereMesh.new()
+	puff.radius = 1.0
+	puff.height = 1.3
+	puff.radial_segments = 8
+	puff.rings = 4
+	cloud_mat = StandardMaterial3D.new()
+	cloud_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	cloud_mat.disable_fog = true
+	var xfs: Array = []
+	for c in 30:
+		var ca := rng.randf() * TAU
+		var cr := rng.randf_range(150.0, 340.0)
+		var centre := Vector3(cos(ca) * cr, rng.randf_range(75.0, 150.0), sin(ca) * cr)
+		var cs := rng.randf_range(14.0, 30.0)
+		for p in rng.randi_range(4, 7):
+			var ps := cs * rng.randf_range(0.55, 1.0)
+			var off := Vector3(rng.randf_range(-1.6, 1.6) * cs, rng.randf_range(-0.12, 0.2) * cs, rng.randf_range(-0.8, 0.8) * cs)
+			xfs.append(Transform3D(Basis.from_scale(Vector3(ps * 1.5, ps * 0.62, ps * 1.2)), centre + off))
+	cloud_root = Node3D.new()
+	add_child(cloud_root)
+	var clouds := _mm(puff, cloud_mat, xfs, [], false)
+	clouds.reparent(cloud_root)
+	var fsh := Shader.new()
+	fsh.code = """
+shader_type spatial;
+render_mode unshaded, blend_add, depth_draw_never, cull_disabled, shadows_disabled;
+uniform float night = 0.0;
+varying float a;
+void vertex() {
+	vec3 o = MODEL_MATRIX[3].xyz;
+	float ph = o.x * 1.3 + o.z * 0.7;
+	vec3 drift = vec3(sin(TIME * 0.6 + ph), sin(TIME * 0.9 + ph * 1.7) * 0.4, cos(TIME * 0.5 + ph * 1.3)) * 1.3;
+	a = max(0.0, sin(TIME * 2.2 + ph * 3.0)) * night;
+	MODELVIEW_MATRIX = VIEW_MATRIX * mat4(INV_VIEW_MATRIX[0], INV_VIEW_MATRIX[1], INV_VIEW_MATRIX[2], vec4(o + drift, 1.0));
+	MODELVIEW_NORMAL_MATRIX = mat3(MODELVIEW_MATRIX);
+}
+void fragment() {
+	float g = pow(max(0.0, 1.0 - length(UV - 0.5) * 2.0), 2.0);
+	ALBEDO = vec3(1.0, 0.92, 0.35) * 2.5;
+	ALPHA = g * a;
+}
+"""
+	firefly_mat = ShaderMaterial.new()
+	firefly_mat.shader = fsh
+	var quad := QuadMesh.new()
+	quad.size = Vector2(0.3, 0.3)
+	xfs = []
+	for i in 320:
+		var fa := rng.randf() * TAU
+		var fr := sqrt(rng.randf()) * (ARENA_R + 4.0)
+		xfs.append(Transform3D(Basis(), Vector3(cos(fa) * fr, rng.randf_range(0.5, 2.6), sin(fa) * fr)))
+	fireflies = _mm(quad, firefly_mat, xfs, [], false)
+	fireflies.visible = false
 
 func _build_scenery() -> void:
 	var tree_mesh: Mesh = main.assets.prop_mesh("agac")
 	var tree_mat: Material = main.assets.prop_material("agac", true)
+	# the great hive tree stands in the middle of everything: the place the keeper is defending
+	if ResourceLoader.exists("res://assets/models/anakovan.glb"):
+		var gh := MeshInstance3D.new()
+		gh.mesh = main.assets.prop_mesh("anakovan")
+		great_mat = main.assets.great_hive_material()
+		gh.material_override = great_mat
+		gh.scale = Vector3.ONE * 20.0
+		gh.position = Vector3(GREAT.x, -0.2, GREAT.y)
+		add_child(gh)
+		great_light = OmniLight3D.new()
+		great_light.light_color = Color(1.0, 0.72, 0.3)
+		great_light.omni_range = 24.0
+		great_light.omni_attenuation = 1.2
+		great_light.light_energy = 0.4
+		great_light.position = Vector3(GREAT.x, 7.0, GREAT.y + 7.5)
+		add_child(great_light)
+		obstacles.append(GREAT)
 	var xfs: Array = []
 	# a thick ring of trees closes the meadow
 	for i in 170:
@@ -149,17 +534,20 @@ func _build_scenery() -> void:
 		xfs.append(Transform3D(Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(s, s, s)), Vector3(cos(a) * r, 0, sin(a) * r)))
 	# trees inside are obstacles
 	for i in 20:
-		var p := _free_spot(12.0, ARENA_R - 6.0, 6.0)
+		var p := _free_spot(18.0, ARENA_R - 6.0, 6.0)
 		var s2 := rng.randf_range(6.5, 9.0)
 		xfs.append(Transform3D(Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(s2, s2, s2)), Vector3(p.x, 0, p.y)))
 		obstacles.append(Vector3(p.x, p.y, 0.75))
 	_mm(tree_mesh, tree_mat, xfs)
 	# decorative hives
 	var hive_mesh: Mesh = main.assets.prop_mesh("kovan")
-	var deco_hive_mat: Material = main.assets.prop_material("kovan", true)
+	deco_hive_mat = main.assets.prop_material("kovan", true)
+	deco_hive_mat.emission_enabled = true
+	deco_hive_mat.emission = Color(1.0, 0.72, 0.25)
+	deco_hive_mat.emission_energy_multiplier = 0.0
 	xfs = []
 	for i in 9:
-		var p2 := _free_spot(9.0, ARENA_R - 8.0, 5.0)
+		var p2 := _free_spot(16.0, ARENA_R - 8.0, 5.0)
 		xfs.append(Transform3D(Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(2.6, 2.6, 2.6)), Vector3(p2.x, 0, p2.y)))
 		obstacles.append(Vector3(p2.x, p2.y, 1.1))
 	_mm(hive_mesh, deco_hive_mat, xfs)
@@ -177,7 +565,7 @@ func _build_scenery() -> void:
 	rmat.distance_fade_max_distance = 6.0
 	xfs = []
 	for i in 34:
-		var p3 := _free_spot(8.0, ARENA_R - 3.0, 3.0)
+		var p3 := _free_spot(15.0, ARENA_R - 3.0, 3.0)
 		var s3 := rng.randf_range(0.5, 1.7)
 		var b := Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(s3 * rng.randf_range(0.8, 1.3), s3 * rng.randf_range(0.6, 1.0), s3))
 		xfs.append(Transform3D(b, Vector3(p3.x, s3 * 0.15, p3.y)))
@@ -185,66 +573,9 @@ func _build_scenery() -> void:
 			obstacles.append(Vector3(p3.x, p3.y, s3 * 0.95))
 	_mm(rock, rmat, xfs)
 	static_obstacles = obstacles.duplicate()
-	# flowers and grass tufts: colour and shape only, no collisions
-	# flowers: a thin stem and a flat head, in loose patches
-	var head := CylinderMesh.new()
-	head.top_radius = 0.11
-	head.bottom_radius = 0.05
-	head.height = 0.05
-	head.radial_segments = 6
-	head.rings = 1
-	var stem := BoxMesh.new()
-	stem.size = Vector3(0.03, 1.0, 0.03)
-	var fmat := StandardMaterial3D.new()
-	fmat.vertex_color_use_as_albedo = true
-	fmat.vertex_color_is_srgb = true
-	fmat.roughness = 0.9
-	var smat := StandardMaterial3D.new()
-	smat.albedo_color = Color(0.25, 0.5, 0.16)
-	smat.roughness = 0.95
-	xfs = []
-	var stems: Array = []
+	_build_flora()
+	_build_sky_life()
 	var cols: Array = []
-	var palette := [Color(1, 1, 0.95), Color(1.0, 0.85, 0.2), Color(0.66, 0.42, 0.9), Color(1.0, 0.6, 0.75)]
-	for patch in 150:
-		var ca := rng.randf() * TAU
-		var cr := sqrt(rng.randf()) * (ARENA_R + 4.0)
-		var centre := Vector2(cos(ca) * cr, sin(ca) * cr)
-		var col: Color = palette[rng.randi() % palette.size()]
-		for i in rng.randi_range(4, 11):
-			var p4 := centre + Vector2(rng.randf_range(-1.6, 1.6), rng.randf_range(-1.6, 1.6))
-			var h4 := rng.randf_range(0.14, 0.3)
-			var s4 := rng.randf_range(0.8, 1.3)
-			var tilt := Basis(Vector3.UP, rng.randf() * TAU) * Basis(Vector3.RIGHT, rng.randf_range(-0.35, 0.35))
-			xfs.append(Transform3D(tilt.scaled(Vector3(s4, s4, s4)), Vector3(p4.x, h4, p4.y)))
-			stems.append(Transform3D(Basis.from_scale(Vector3(1, h4, 1)), Vector3(p4.x, h4 * 0.5, p4.y)))
-			cols.append(col.lerp(Color.WHITE, rng.randf() * 0.2))
-	_mm(head, fmat, xfs, cols, false)
-	_mm(stem, smat, stems, [], false)
-	# grass: clumps of three thin blades
-	var blade := PrismMesh.new()
-	blade.size = Vector3(0.1, 0.42, 0.02)
-	var tmat := StandardMaterial3D.new()
-	tmat.vertex_color_use_as_albedo = true
-	tmat.vertex_color_is_srgb = true
-	tmat.cull_mode = BaseMaterial3D.CULL_DISABLED
-	tmat.roughness = 0.95
-	xfs = []
-	cols = []
-	for i in 1700:
-		var a3 := rng.randf() * TAU
-		var r3 := sqrt(rng.randf()) * (ARENA_R + 6.0)
-		var base := Vector3(cos(a3) * r3, 0, sin(a3) * r3)
-		var gcol := Color(0.26, 0.52, 0.15).lerp(Color(0.36, 0.62, 0.18), rng.randf())
-		var yaw0 := rng.randf() * TAU
-		for k in 3:
-			var s5 := rng.randf_range(0.7, 1.35)
-			var yw := yaw0 + TAU * k / 3.0
-			var bb := Basis(Vector3.UP, yw) * Basis(Vector3.RIGHT, rng.randf_range(0.15, 0.45))
-			var off := Vector3(sin(yw), 0, cos(yw)) * 0.07
-			xfs.append(Transform3D(bb.scaled(Vector3(s5, s5, s5)), base + off + Vector3(0, 0.19 * s5, 0)))
-			cols.append(gcol)
-	_mm(blade, tmat, xfs, cols, false)
 	# far hills
 	var hill := CylinderMesh.new()
 	hill.top_radius = 0.0
@@ -298,6 +629,7 @@ func reset() -> void:
 	obstacles = static_obstacles.duplicate()
 	rng.randomize()
 	shrine_progress = -1.0
+	set_daytime(0.0 if main.state == main.PLAY else 0.5)
 	hive_mat = main.assets.prop_material("kovan")
 	hive_mat.emission_enabled = true
 	hive_mat.emission = Color(1.0, 0.8, 0.2)
@@ -386,6 +718,11 @@ func update(dt: float) -> void:
 	time += dt
 	var pl = main.player
 	var p: Vector3 = pl.pos
+	set_daytime(main.game.time / main.game.BOSS_TIME)
+	cloud_root.rotation.y += dt * 0.004
+	lantern.position = p + Vector3(0, 1.7, 0)
+	for fm in flora_mats:
+		fm.set_shader_parameter("player", p)
 	# a new chest appears on the far side of the meadow every 70 seconds, at most three wait at once
 	chest_timer -= dt
 	if chest_timer <= 0.0:

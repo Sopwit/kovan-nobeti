@@ -33,8 +33,12 @@ const EVO := {
 	"kivilcim": ["saat", 3, "Polen Fırtınası", "+6 sekme, +20 hasar, %40 daha sık çakar"],
 }
 const HEAL_CARD := {"id": "sifa", "name": "Bal Kavanozu", "icon": 18, "max": 999, "kind": "p", "desc": "40 can iyileşir"}
-const SRC_NAMES := {"ari": "Arı Sürüsü", "tutsu": "Tütsü Halkası", "bomba": "Bal Bombası", "igne": "İğne Çarkı", "kivilcim": "Polen Kıvılcımı", "inis": "Ezici İniş", "kayis": "Dikenli Kayış", "sunak": "Sunak"}
-const KILL_COL := [Color(0.6, 0.25, 0.8), Color(0.95, 0.25, 0.2), Color(0.4, 0.3, 0.8), Color(1.0, 0.4, 0.7), Color(1.0, 0.2, 0.2)]
+const SRC_NAMES := {"ari": "Arı Sürüsü", "tutsu": "Tütsü Halkası", "bomba": "Bal Bombası", "igne": "İğne Çarkı", "kivilcim": "Polen Kıvılcımı", "inis": "Ezici İniş", "kayis": "Dikenli Kayış", "sunak": "Sunak", "patlak": "Patlak Zinciri"}
+const KILL_COL := [Color(0.6, 0.25, 0.8), Color(0.95, 0.25, 0.2), Color(0.4, 0.3, 0.8), Color(1.0, 0.4, 0.7), Color(1.0, 0.2, 0.2),
+	Color(1.0, 0.6, 0.15), Color(0.65, 0.85, 0.2), Color(0.9, 0.2, 0.15), Color(0.2, 0.75, 0.7)]
+# when the two champions arrive, and what each is called
+const CHAMP_TIMES := [200.0, 400.0]
+const CHAMP_NAMES := ["MAKAS", "AKREP"]
 
 var main
 var active := false
@@ -58,6 +62,16 @@ var recycle_i := 0
 var next_log := 30.0
 var last_dealt := 0.0
 var last_kills := 0
+var champs_sent := 0
+# staged moments, timed in real seconds: [time left, kind, position, size]
+var cues: Array = []
+# slow motion for a staged moment: real seconds left and the factor
+var slow_t := 0.0
+var slow_k := 1.0
+# damage per second over the last stretch: champions are sized from it
+var dps_recent := 0.0
+var dps_t := 0.0
+var dps_d := 0.0
 
 func setup(m) -> void:
 	main = m
@@ -87,6 +101,12 @@ func start() -> void:
 	victory = false
 	end_t = 0.0
 	next_log = 30.0
+	champs_sent = 0
+	cues.clear()
+	slow_t = 0.0
+	dps_recent = 0.0
+	dps_t = 0.0
+	dps_d = 0.0
 	last_dealt = 0.0
 	last_kills = 0
 	Engine.time_scale = main.debug_speed
@@ -269,6 +289,20 @@ func on_enemy_killed(t: int, at: Vector3, elite: bool, s: float) -> void:
 		main.stop_for(0.22, true)
 		_win(at)
 		return
+	if t >= main.enemies.T_STAG:
+		# a champion falls: a chest, a heap of honey and a breather
+		main.stop_for(0.16, true)
+		main.fx.shake(0.8)
+		main.fx.explosion(at, 8.0, KILL_COL[t])
+		main.audio.play("boss_slam", 0.0, 0.8)
+		main.pickups.drop_item("chest", at)
+		for k in 10:
+			var ga := TAU * k / 10.0
+			main.pickups.drop_gem(at + Vector3(cos(ga) * 2.2, 0, sin(ga) * 2.2), 6)
+		main.player.heal(20.0)
+		main.ui.banner(CHAMP_NAMES[t - main.enemies.T_STAG] + " DEVRİLDİ", "Sandığını al")
+		stats.champs = stats.get("champs", 0) + 1
+		return
 	var v: int = main.enemies.TYPES[t].xp
 	if elite:
 		main.pickups.drop_gem(at, 25)
@@ -308,14 +342,23 @@ func _win(at: Vector3) -> void:
 		print("T WIN t=%d lv=%d kills=%d hp=%d hits=%s w=%s p=%s" % [int(time), level, kills, int(main.player.hp), str(hits), str(main.weapons.levels.values()), str(passives)])
 	over = true
 	victory = true
-	end_t = 2.6
+	# she does not just vanish: the camera turns to her, she shudders under a string of blasts, then bursts
+	end_t = 3.7
 	Engine.time_scale = 0.4
 	main.fx.shake(1.0)
 	main.fx.explosion(at, 12.0, Color(1.0, 0.8, 0.2))
 	main.audio.play("victory")
+	main.player.focus_on(at, 3.2)
+	for k in 5:
+		var oa := randf() * TAU
+		cues.append([0.3 + 0.3 * k, "boom", at + Vector3(cos(oa) * 2.5, 0, sin(oa) * 2.5), 5.0 + k])
+	cues.append([1.9, "final", at, 16.0])
 	# the swarm dies with its queen, and her attacks with her
 	var en = main.enemies
 	en.rings.clear()
+	en.pops.clear()
+	en.lobs.clear()
+	main.fx.warns.clear()
 	en.bcount = 0
 	for i in en.count:
 		if en.dead[i] == 0:
@@ -324,9 +367,53 @@ func _win(at: Vector3) -> void:
 			main.pickups.drop_gem(Vector3(en.px[i], 0, en.pz[i]), 1)
 	main.pickups.pull_all()
 
+func slow(secs: float, k: float) -> void:
+	slow_t = secs
+	slow_k = k
+
+func _run_cues(real: float) -> void:
+	if slow_t > 0.0:
+		slow_t -= real
+		if not over:
+			Engine.time_scale = main.debug_speed * (slow_k if slow_t > 0.0 else 1.0)
+	if cues.is_empty():
+		return
+	var keep: Array = []
+	for c in cues:
+		c[0] -= real
+		if c[0] > 0.0:
+			keep.append(c)
+			continue
+		var at: Vector3 = c[2]
+		var size: float = c[3]
+		match c[1]:
+			"boom":
+				main.fx.explosion(at, size, Color(1.0, 0.5, 0.25))
+				main.fx.shake(0.45)
+				main.audio.play("explosion", -3.0, randf_range(0.8, 1.1))
+			"rise":
+				# the queen breaks the ground: everything near her is thrown back
+				main.fx.explosion(at, size, Color(1.0, 0.3, 0.25))
+				main.fx.burst(at + Vector3(0, 1.0, 0), Color(0.45, 0.3, 0.15), 40, 14.0)
+				main.weapons.push_back(at, size, 20.0, false)
+				main.fx.shake(1.0)
+				main.audio.play("boss_slam", 0.0, 0.8)
+			"final":
+				main.fx.explosion(at, size, Color(1.0, 0.85, 0.3))
+				main.fx.burst(at + Vector3(0, 2.0, 0), Color(1.0, 0.8, 0.2), 48, 16.0)
+				main.fx.shake(1.0)
+				main.audio.play("explosion", 0.0, 0.6)
+				for k in 24:
+					var ga := randf() * TAU
+					var gr := randf_range(1.0, 7.0)
+					main.pickups.drop_gem(at + Vector3(cos(ga) * gr, 0, sin(ga) * gr), 3)
+				main.pickups.pull_all()
+	cues = keep
+
 func update(dt: float) -> void:
 	if not active:
 		return
+	_run_cues(dt / maxf(0.05, Engine.time_scale))
 	if over:
 		end_t -= dt / maxf(0.05, Engine.time_scale)
 		if end_t <= 0.0:
@@ -370,8 +457,11 @@ func update(dt: float) -> void:
 		last_kills = kills
 	if not over:
 		_spawn(dt)
-		if time >= 300.0 and not boss_spawned and main.audio.current == "oyun1":
+		# the music follows the day: afternoon, golden hour, night
+		if time >= 220.0 and not boss_spawned and main.audio.current == "oyun1":
 			main.audio.music("oyun2")
+		elif time >= 430.0 and not boss_spawned and main.audio.current == "oyun2":
+			main.audio.music("gece")
 		if not queue.is_empty() and not main.ui.choosing:
 			var kind: String = queue.pop_front()
 			main.ui.show_choice(kind, choices())
@@ -393,6 +483,12 @@ func _pick_type() -> int:
 	var r := randf()
 	if time > 300.0 and r < minf(0.065, (time - 300.0) / 4000.0 + 0.03):
 		return en.T_SPIT
+	r = randf()
+	if time > 250.0 and r < minf(0.07, (time - 250.0) / 3500.0 + 0.03):
+		return en.T_HOP
+	r = randf()
+	if time > 130.0 and r < minf(0.07, (time - 130.0) / 3500.0 + 0.03):
+		return en.T_BOOM
 	r = randf()
 	if time > 170.0 and r < minf(0.11, (time - 170.0) / 2500.0 + 0.04):
 		return en.T_BRUTE
@@ -438,6 +534,8 @@ func _spawn(dt: float) -> void:
 		en.spawn(st, p.x, p.y, false, hp_scale())
 		if st == en.T_SPIT:
 			hint("spit", "Tüküren geldi, tükürüğün üstünden zıpla")
+		elif st == en.T_BOOM:
+			hint("patlak", "Patlak böcek sürüyü de yakar, uzaktan vur")
 	if en.count >= hard_cap:
 		spawn_acc = minf(spawn_acc, 1.0)
 	# stragglers far behind the player rejoin the ring around them
@@ -447,7 +545,7 @@ func _spawn(dt: float) -> void:
 			break
 		recycle_i = (recycle_i + 1) % en.count
 		var i := recycle_i
-		if en.dead[i] == 0 and en.typ[i] != en.T_BOSS and en.elite[i] == 0:
+		if en.dead[i] == 0 and en.typ[i] != en.T_BOSS and en.typ[i] < en.T_STAG and en.elite[i] == 0 and en.st[i] == 0:
 			var dx: float = en.px[i] - pl.x
 			var dz: float = en.pz[i] - pl.z
 			if dx * dx + dz * dz > 38.0 * 38.0:
@@ -477,12 +575,29 @@ func _spawn(dt: float) -> void:
 		en.spawn(et, p3.x, p3.y, true, hp_scale() * (2.0 if et == en.T_BEETLE else 1.0))
 		main.ui.toast("Elit geldi, sandığı onda")
 		main.audio.play("horn", 0.0, 0.8)
+	if time - dps_t >= 15.0:
+		dps_recent = (stats.dealt - dps_d) / (time - dps_t)
+		dps_t = time
+		dps_d = stats.dealt
+	if champs_sent < CHAMP_TIMES.size() and time >= CHAMP_TIMES[champs_sent] and not boss_spawned:
+		var ct: int = en.T_STAG + champs_sent
+		champs_sent += 1
+		var cp := _ring_pos(24.0, 27.0)
+		# sized from the damage this build has been dealing: about half a minute of fight for anyone
+		var chp := clampf(dps_recent * 9.0, 500.0 * hp_scale(), 60000.0)
+		if main.bot_mode:
+			print("T CHAMP %s hp=%d dps=%d" % [CHAMP_NAMES[ct - en.T_STAG], int(chp), int(dps_recent)])
+		en.spawn(ct, cp.x, cp.y, false, chp / float(en.TYPES[ct].hp))
+		main.fx.splat(cp.x, cp.y, 5.0, Color(0.22, 0.15, 0.08, 0.8), 3.0)
+		main.ui.banner(CHAMP_NAMES[ct - en.T_STAG], "Sürünün koçbaşı" if ct == en.T_STAG else "Zehirli kuyruk")
+		main.audio.play("boss_roar", 0.0, 1.2)
+		main.fx.shake(0.5)
 	if mark_dealt < 0.0 and time >= BOSS_TIME - 45.0:
 		mark_dealt = stats.dealt
 		mark_time = time
 	if time >= BOSS_TIME and not boss_spawned:
 		boss_spawned = true
-		var p4 := _ring_pos(28.0, 30.0)
+		var p4 := _ring_pos(20.0, 23.0)
 		# a fight of about a minute for any build: a strong one still ends it sooner
 		var recent := 40.0 * level
 		if time - mark_time > 5.0:
@@ -490,8 +605,18 @@ func _spawn(dt: float) -> void:
 		var boss_hp := clampf(10000.0 + recent * 9.0, 14000.0, 120000.0)
 		if main.bot_mode:
 			print("T BOSS hp=%d recent_dps=%d" % [int(boss_hp), int(recent)])
-		en.spawn(en.T_BOSS, p4.x, p4.y, false, boss_hp / float(en.TYPES[en.T_BOSS].hp))
-		main.ui.toast("KRALİÇE GELDİ")
+		var qi: int = en.spawn(en.T_BOSS, p4.x, p4.y, false, boss_hp / float(en.TYPES[en.T_BOSS].hp))
+		# her entrance: the ground swells and cracks in slow motion while the camera turns to her
+		if qi >= 0:
+			en.born[qi] = 1.0
+		var qp := Vector3(p4.x, 0, p4.y)
+		main.ui.banner("KRALİÇE", "Sürünün anası uyandı")
 		main.audio.play("boss_roar")
 		main.audio.music("boss")
 		main.fx.shake(0.7)
+		main.fx.splat(p4.x, p4.y, 9.0, Color(0.2, 0.13, 0.07, 0.85), 8.0)
+		main.player.focus_on(qp, 2.8)
+		slow(2.0, 0.3)
+		cues.append([0.5, "boom", qp, 6.0])
+		cues.append([1.05, "boom", qp, 9.0])
+		cues.append([1.65, "rise", qp, 13.0])
