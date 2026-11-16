@@ -56,4 +56,4 @@ Sürekli çalan tek ses müzik. Menü, oyunun ilk yarısı, ikinci yarısı ve K
 - `project.godot` yerel Beckett eklentisini çağırıyor, eklenti depoda değil. Temiz bir kopyada Godot açılışta eksik eklenti hatası yazar; oyun yine çalışır (temiz kopya ekransız bir bot turuyla denendi).
 
 ## Süre
-16 Kasım 2026'da 11:37'de başladı, 14:47'de bitti, yaklaşık 3 saat 10 dakika sürdü.
+16 Kasım 2026'da 11:37'de başladı, 14:45'te bitti, yaklaşık 3 saat 10 dakika sürdü.
