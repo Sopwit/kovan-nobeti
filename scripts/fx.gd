@@ -249,7 +249,7 @@ func number(at: Vector3, amount: float, crit: bool) -> void:
 	numbers.append({"p": at, "v": int(round(amount)), "t": 0.0, "c": crit, "ox": randf_range(-18.0, 18.0)})
 
 func hit(at: Vector3) -> void:
-	main.audio.play("hit", -9.0, randf_range(0.85, 1.25))
+	main.audio.play("hit", -3.0, randf_range(0.85, 1.25))
 	if hit_budget <= 0:
 		return
 	hit_budget -= 1

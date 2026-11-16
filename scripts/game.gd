@@ -360,6 +360,11 @@ var boss_sized := false
 # what the build dealt per second to the whole swarm just before she arrived
 var boss_recent := 0.0
 
+# Past a minute and a half the queen tires and every hit bites deeper, so a build that is weak against
+# one big body is not stuck in an endless finale.
+func boss_tired() -> float:
+	return 1.0 + maxf(0.0, boss_t - 85.0) / 20.0
+
 # The queen drops under half: the fight changes gear and says so.
 func boss_rage(at: Vector3) -> void:
 	main.ui.banner("KRALİÇE ÖFKELENDİ", "Zehir yağdırıyor, daha sık vuruyor")
@@ -663,7 +668,7 @@ func _spawn(dt: float) -> void:
 				# The finale lasts about 70 seconds for any build. A build that barely touched her during the
 				# probe (kept away, or weak against one body) is measured by a share of what it does to the
 				# swarm instead, so staying back never shrinks her into a short fight.
-				var est := maxf(boss_taken / BOSS_PROBE, boss_recent * 0.22)
+				var est := maxf(boss_taken / BOSS_PROBE, boss_recent * 0.15)
 				var remain := clampf(est * 62.0, 200.0 * level, 190000.0)
 				var frac: float = clampf(en.hp[bi] / en.maxhp[bi], 0.3, 1.0)
 				en.hp[bi] = remain

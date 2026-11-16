@@ -34,7 +34,7 @@ var bot
 
 var state := MENU
 var paused := false
-var settings := {"sens": 1.0, "music": 0.9, "sfx": 0.8, "brightness": 1.0}
+var settings := {"sens": 1.0, "music": 0.9, "sfx": 0.9, "brightness": 1.0}
 var record := {"runs": 0, "best_time": 0.0, "best_kills": 0, "wins": 0}
 # the apiary: honey in the bank, levels of the permanent upgrades, honey earned by the last run
 var honey := 0

@@ -11,7 +11,7 @@ out=/var/tmp/kovan/inc
 mkdir -p "$out"
 rm -f "$out/$name.avi"
 root="$(cd "$(dirname "$0")/.." && pwd)"
-lock="flock /var/tmp/hayatta-kalma-agir.lock systemd-run --user --scope --quiet -p CPUQuota=200% nice -n 19"
+lock="flock /var/tmp/hayatta-kalma-agir-fable.lock systemd-run --user --scope --quiet -p CPUQuota=200% nice -n 19"
 $lock timeout 240 godot --path "$root" --write-movie "$out/$name.avi" --fixed-fps 30 --quit-after $((secs * 30)) -- --bot "$@" >"$out/$name.log" 2>&1 || { echo "recording failed, see $out/$name.log" >&2; exit 1; }
 $lock ffmpeg -v error -y -threads 2 -i "file:$out/$name.avi" -threads 2 -filter_threads 2 -vf "fps=2,scale=480:-1,tile=4x5" -frames:v 1 -q:v 3 "$out/$name.jpg"
 ls -la "$out/$name.jpg" "$out/$name.avi" | awk '{print $5, $9}'

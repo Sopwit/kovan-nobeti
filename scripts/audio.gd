@@ -12,11 +12,13 @@ const MUSIC := {
 	"boss": ["muzik_boss.mp3", -12.3],
 }
 # effect -> [measured loudness when looped back to back (LUFS), target loudness, minimum gap between plays (s)]
-# Frequent effects sit 13 to 16 LU under the music, rare big ones 3 to 6 LU under it.
+# Frequent effects sit 12 to 16 LU under the music, rare big ones 3 to 6 LU under it. Rendered together
+# at the pace of a busy fight (tools/miks.py) they measure about -19.5 LUFS, 5 to 6 LU under the music:
+# they are heard, it still leads. The hit sits with the kill and the pickup, not far below them.
 const SFX := {
-	"hit": [-15.8, -30.0, 0.06],
-	"kill": [-14.5, -28.0, 0.07],
-	"gem": [-15.5, -28.0, 0.05],
+	"hit": [-15.8, -27.0, 0.06],
+	"kill": [-14.5, -26.0, 0.07],
+	"gem": [-15.5, -27.0, 0.05],
 	"shoot": [-21.4, -30.0, 0.08],
 	"zap": [-17.0, -25.0, 0.1],
 	"spit": [-15.8, -26.0, 0.1],

@@ -7,7 +7,7 @@ if [ "$#" -ge 2 ]; then shift 2; else shift "$#"; fi
 i=1
 while [ "$i" -le "$n" ]; do
 	echo "== run $i"
-	flock /var/tmp/hayatta-kalma-agir.lock systemd-run --user --scope --quiet -p CPUQuota=200% nice -n 19 \
+	flock /var/tmp/hayatta-kalma-agir-fable.lock systemd-run --user --scope --quiet -p CPUQuota=200% nice -n 19 \
 		timeout 400 godot --headless --path "$(dirname "$0")/.." -- --bot --once --speed="$speed" "$@" 2>&1 | grep --line-buffered -E "^T |ERROR|SCRIPT"
 	i=$((i + 1))
 done

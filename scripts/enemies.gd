@@ -414,8 +414,10 @@ func height_of(i: int) -> float:
 func hurt(i: int, amount: float, kx: float, kz: float, src: String, crit := false) -> bool:
 	if i < 0 or i >= count or dead[i] == 1:
 		return false
-	hp[i] -= amount
 	var t := typ[i]
+	if t == T_BOSS:
+		amount *= main.game.boss_tired()
+	hp[i] -= amount
 	if t == T_BOSS or t >= T_STAG:
 		# hit many times a second, a big body would stay white: one short pulse, then a rest that shows its skin
 		if flash[i] <= -1.4:
