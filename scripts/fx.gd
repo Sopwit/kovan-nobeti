@@ -17,9 +17,17 @@ var boom_i := 0
 var hurt_rect: ColorRect
 var hurt_a := 0.0
 var hit_budget := 0
+# ground marks: soil where something dug out, goo where something died. A ring buffer on one MultiMesh.
+const DMAX := 220
+var decal_mm: MultiMesh
+var decal_t := PackedFloat32Array()
+var decal_life := PackedFloat32Array()
+var decal_col: Array[Color] = []
+var decal_i := 0
 
 func setup(m) -> void:
 	main = m
+	_build_decals()
 	var pm := BoxMesh.new()
 	pm.size = Vector3(0.16, 0.16, 0.16)
 	var pmat := StandardMaterial3D.new()
@@ -91,12 +99,71 @@ func _make_particles(mesh: Mesh, amount: int, life: float) -> CPUParticles3D:
 	add_child(p)
 	return p
 
+func _build_decals() -> void:
+	decal_mm = MultiMesh.new()
+	decal_mm.transform_format = MultiMesh.TRANSFORM_3D
+	decal_mm.use_colors = true
+	var q := QuadMesh.new()
+	q.size = Vector2(2, 2)
+	q.orientation = PlaneMesh.FACE_Y
+	var sh := Shader.new()
+	sh.code = """
+shader_type spatial;
+render_mode unshaded, depth_draw_never, shadows_disabled, cull_disabled;
+varying vec4 col;
+varying float seed;
+void vertex() { col = vec4(pow(COLOR.rgb, vec3(2.2)), COLOR.a); seed = INSTANCE_ID == 0 ? 0.0 : float(INSTANCE_ID) * 1.7; }
+void fragment() {
+	vec2 p = UV * 2.0 - 1.0;
+	float a = atan(p.y, p.x);
+	// a lumpy blob: the edge wanders with the angle, differently for every mark
+	float edge = 0.72 + 0.16 * sin(a * 3.0 + seed) + 0.10 * sin(a * 7.0 + seed * 2.3);
+	float d = length(p);
+	ALBEDO = col.rgb * (0.85 + 0.15 * smoothstep(edge, 0.0, d));
+	ALPHA = col.a * (1.0 - smoothstep(edge - 0.12, edge, d));
+}
+"""
+	var m := ShaderMaterial.new()
+	m.shader = sh
+	q.material = m
+	decal_mm.mesh = q
+	decal_mm.instance_count = DMAX
+	decal_t.resize(DMAX)
+	decal_life.resize(DMAX)
+	decal_col.resize(DMAX)
+	for k in DMAX:
+		decal_t[k] = 0.0
+		decal_life[k] = 1.0
+		decal_col[k] = Color(0, 0, 0, 0)
+		decal_mm.set_instance_transform(k, Transform3D(Basis().scaled(Vector3.ZERO), Vector3.ZERO))
+		decal_mm.set_instance_color(k, Color(0, 0, 0, 0))
+	var inst := MultiMeshInstance3D.new()
+	inst.multimesh = decal_mm
+	inst.custom_aabb = AABB(Vector3(-200, -2, -200), Vector3(400, 6, 400))
+	inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(inst)
+
+# A mark on the ground that fades out over `life` seconds.
+func splat(x: float, z: float, size: float, col: Color, life: float) -> void:
+	var k := decal_i
+	decal_i = (decal_i + 1) % DMAX
+	decal_t[k] = life
+	decal_life[k] = life
+	decal_col[k] = col
+	var b := Basis(Vector3.UP, randf() * TAU).scaled(Vector3(size, 1.0, size))
+	decal_mm.set_instance_transform(k, Transform3D(b, Vector3(x, 0.035 + 0.0002 * k, z)))
+	decal_mm.set_instance_color(k, col)
+
 func attach_ui(layer: Control, hurt: ColorRect) -> void:
 	num_layer = layer
 	hurt_rect = hurt
 	num_layer.draw.connect(_draw_numbers)
 
 func reset() -> void:
+	for k in DMAX:
+		if decal_t[k] > 0.0:
+			decal_t[k] = 0.0
+			decal_mm.set_instance_color(k, Color(0, 0, 0, 0))
 	numbers.clear()
 	trauma = 0.0
 	hurt_a = 0.0
@@ -167,6 +234,15 @@ func update(dt: float) -> void:
 			(b.material_override as ShaderMaterial).set_shader_parameter("f", f)
 			if boom_t[k] <= 0.0:
 				b.visible = false
+	for k in DMAX:
+		if decal_t[k] > 0.0:
+			decal_t[k] -= dt
+			# full for most of its life, then fades over the last third
+			var fade := decal_t[k] / (decal_life[k] * 0.35)
+			if fade < 1.0:
+				var c := decal_col[k]
+				c.a *= maxf(0.0, fade)
+				decal_mm.set_instance_color(k, c)
 	var keep: Array = []
 	for n in numbers:
 		n.t += dt

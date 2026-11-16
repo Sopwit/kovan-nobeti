@@ -582,13 +582,7 @@ func _process(dt: float) -> void:
 			bot_t -= dt
 			if bot_t <= 0.0:
 				choice_lock = 0.0
-				# the bot plays like a sensible player: evolutions first, then weapons, else anything
-				var pick := randi() % 3
-				for want in (["w", "e"] if randf() < 0.6 else ["e"]):
-					for ci in 3:
-						if card_data[ci].kind == want and card_data[ci].id != "sifa":
-							pick = ci
-				_choose(pick)
+				_choose(bot_pick(card_data))
 	if end_panel.visible and end_lock > 0.0:
 		end_lock -= dt
 		if end_lock <= 0.0:
@@ -602,6 +596,15 @@ func _process(dt: float) -> void:
 		hint_t -= dt
 	if hud.visible:
 		hud.queue_redraw()
+
+# The bot plays like a sensible player: evolutions first, then weapons most of the time, else anything.
+func bot_pick(list: Array) -> int:
+	var pick := randi() % 3
+	for want in (["w", "e"] if randf() < 0.6 else ["e"]):
+		for ci in 3:
+			if list[ci].kind == want and list[ci].id != "sifa":
+				pick = ci
+	return pick
 
 func _input(ev: InputEvent) -> void:
 	if choosing and ev is InputEventKey and ev.pressed and not ev.echo:
@@ -689,7 +692,7 @@ func _draw_hud() -> void:
 	if main.world.shrine_progress >= 0.0:
 		_text(hud, Vector2(W * 0.5 - 200, H * 0.70), "Sunak uyanıyor", 26, TEAL, HORIZONTAL_ALIGNMENT_CENTER, 400)
 		_bar(hud, Rect2(W * 0.5 - 170, H * 0.70 + 12, 340, 14), main.world.shrine_progress, TEAL)
-	if toast_t > 0.0:
+	if toast_t > 0.0 and not choosing:
 		var a := clampf(toast_t * 2.0, 0.0, 1.0)
 		var pop := 1.0 + maxf(0.0, toast_t - 2.4) * 1.5
 		_text(hud, Vector2(W * 0.5 - 600, H * 0.27), toast_text, int(46 * pop), Color(1.0, 0.9, 0.5, a), HORIZONTAL_ALIGNMENT_CENTER, 1200)

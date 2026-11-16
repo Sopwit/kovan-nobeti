@@ -65,7 +65,12 @@ var debug_levels := 0:
 			for i in mini(v, 200):
 				game.level += 1
 				game.xp_need = game._need(game.level)
-				game.queue.append("level")
+				if bot_mode and not ui.hold_choice:
+					# the bot takes its head start without sitting through the panels
+					var c: Array = game.choices()
+					game.apply(c[ui.bot_pick(c)].id)
+				else:
+					game.queue.append("level")
 # "choice" holds an upgrade panel open ("chest" a chest one, "evo" one with an evolution),
 # "pause" opens the pause menu, "settings" the settings panel of the main menu, "win" and "lose" end the run
 var debug_ui := "":

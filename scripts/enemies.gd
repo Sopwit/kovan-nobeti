@@ -48,6 +48,8 @@ var dead := PackedByteArray()
 var nxt := PackedInt32Array()
 var head := {}
 var dead_any := false
+# what each kind leaves on the ground when it dies
+const GOO := [Color(0.45, 0.2, 0.6, 0.7), Color(0.75, 0.2, 0.15, 0.65), Color(0.3, 0.25, 0.6, 0.75), Color(0.85, 0.3, 0.55, 0.7), Color(0.7, 0.1, 0.2, 0.8)]
 # bodies that were just killed: drawn squashing flat for a moment
 var dying: Array = []
 var sep_cursor := 0
@@ -208,6 +210,8 @@ func spawn(t: int, x: float, z: float, is_elite := false, hp_mult := 1.0) -> int
 	timer[i] = randf_range(1.0, 3.0)
 	phase[i] = randf() * TAU
 	born[i] = 0.5
+	if t != T_WASP and t != T_BOSS:
+		main.fx.splat(x, z, d.size * s * 0.75, Color(0.22, 0.15, 0.08, 0.75), 1.6)
 	yaw[i] = 0.0
 	scl[i] = d.size * s * randf_range(0.92, 1.08)
 	typ[i] = t
@@ -347,6 +351,7 @@ func hurt(i: int, amount: float, kx: float, kz: float, src: String, crit := fals
 		dead_any = true
 		if dying.size() < 90:
 			dying.append([t, px[i], height_of(i), pz[i], yaw[i], scl[i], 0.16])
+		main.fx.splat(px[i], pz[i], scl[i] * 0.85, GOO[t], 9.0)
 		main.game.on_enemy_killed(t, Vector3(px[i], height_of(i), pz[i]), elite[i] == 1, scl[i])
 		if t == T_BOSS:
 			boss_uid = -1
@@ -496,10 +501,13 @@ func update(dt: float) -> void:
 				main.game.note_hit(TYPES[t].key)
 		# draw
 		var s := scl[i] * (1.0 + flash[i] * 0.18)
+		var dig := 0.0
 		if born[i] > 0.0:
-			# newcomers grow out of the ground
+			# newcomers dig themselves out of the ground; wasps dive in from above
 			var g := 1.0 - born[i] * 2.0
-			s *= 0.15 + 0.85 * (1.0 - (1.0 - g) * (1.0 - g))
+			var ease := 1.0 - (1.0 - g) * (1.0 - g)
+			s *= 0.6 + 0.4 * ease
+			dig = (1.0 - ease) * (6.0 if t == T_WASP else -scl[i] * 0.9)
 		var yy := 0.0
 		var roll := 0.0
 		if t == T_WASP:
@@ -520,8 +528,8 @@ func update(dt: float) -> void:
 		var m2 := mm[t]
 		if k2 >= m2.instance_count:
 			continue
-		m2.set_instance_transform(k2, Transform3D(bas, Vector3(px[i], yy, pz[i])))
-		m2.set_instance_custom_data(k2, Color(flash[i], 0.0, 0.0, 0.0))
+		m2.set_instance_transform(k2, Transform3D(bas, Vector3(px[i], yy + dig, pz[i])))
+		m2.set_instance_custom_data(k2, Color(flash[i], phase[i], 1.0, 0.0))
 		if elite[i] == 1:
 			m2.set_instance_color(k2, Color(1.0, 0.72, 0.25))
 		elif slow_t[i] > 0.0:

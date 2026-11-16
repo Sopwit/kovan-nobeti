@@ -9,6 +9,16 @@ const NORM := {
 }
 # how much each generated texture is darkened (1 = as is)
 const GRADE := {"bocek": 1.7, "esekarisi": 1.15, "gergedan": 1.25, "tukuren": 1.15, "kralice": 1.2}
+# shader motion per model: leg height, leg swing, stride speed, wing start (distance from the body axis),
+# wing height, wing swing. Unit model space.
+const ANIM_KEYS := ["leg_h", "leg_amp", "stride", "wing_x", "wing_y", "wing_amp"]
+const ANIM := {
+	"bocek": [0.16, 0.08, 14.0, 0.0, 0.0, 1.0],
+	"esekarisi": [0.0, 0.0, 0.0, 0.14, 0.2, 0.9],
+	"gergedan": [0.16, 0.06, 8.0, 0.0, 0.0, 1.0],
+	"tukuren": [0.14, 0.07, 9.0, 0.0, 0.0, 1.0],
+	"kralice": [0.14, 0.04, 6.0, 0.0, 0.0, 1.0],
+}
 const FALLBACK_COL := {
 	"bocek": Color(0.5, 0.2, 0.7), "esekarisi": Color(0.9, 0.2, 0.2), "gergedan": Color(0.3, 0.25, 0.7),
 	"tukuren": Color(0.95, 0.3, 0.6), "kralice": Color(0.8, 0.1, 0.2), "kovan": Color(0.95, 0.7, 0.15),
@@ -31,9 +41,36 @@ uniform sampler2D tex : source_color, filter_linear_mipmap;
 uniform vec4 tint : source_color = vec4(1.0);
 uniform float use_tex = 1.0;
 uniform float grade = 1.0;
+// The generated models are rigid, so the shader moves them: vertices near the ground are legs that
+// scuttle in alternating groups, vertices far out to the sides and high up are wings that beat.
+// Model space is unit sized, base on y = 0, facing +Z. INSTANCE_CUSTOM = (hit flash, phase, activity).
+uniform float leg_h = 0.14;
+uniform float leg_amp = 0.07;
+uniform float stride = 11.0;
+uniform float wing_x = 0.0;
+uniform float wing_y = 0.0;
+uniform float wing_amp = 1.0;
 varying float fl;
 const float BAYER[16] = float[](0.0, 8.0, 2.0, 10.0, 12.0, 4.0, 14.0, 6.0, 3.0, 11.0, 1.0, 9.0, 15.0, 7.0, 13.0, 5.0);
-void vertex() { fl = INSTANCE_CUSTOM.x; }
+void vertex() {
+	fl = INSTANCE_CUSTOM.x;
+	float ph = INSTANCE_CUSTOM.y;
+	float act = INSTANCE_CUSTOM.z;
+	vec3 v = VERTEX;
+	if (wing_x > 0.0) {
+		float w = max(0.0, abs(v.x) - wing_x) * step(wing_y, v.y);
+		v.y += w * sin(TIME * 52.0 + ph) * wing_amp * act;
+	}
+	if (leg_h > 0.0 && v.y < leg_h) {
+		float k = 1.0 - v.y / leg_h;
+		float band = floor(v.z * 5.0);
+		float side = step(0.0, v.x);
+		float a = TIME * stride + ph + (band + side) * 3.14159;
+		v.z += sin(a) * leg_amp * k * act;
+		v.y += max(0.0, cos(a)) * leg_amp * 0.6 * k * act;
+	}
+	VERTEX = v;
+}
 void fragment() {
 	// bodies that come between the camera and the player dissolve instead of blocking the view
 	float near = smoothstep(1.5, 4.5, length(VERTEX));
@@ -152,6 +189,9 @@ func enemy_material(key: String) -> ShaderMaterial:
 	var m := ShaderMaterial.new()
 	m.shader = enemy_shader
 	m.set_shader_parameter("grade", GRADE.get(key, 1.0))
+	var an: Array = ANIM.get(key, [0.14, 0.07, 11.0, 0.0, 0.0, 1.0])
+	for ai in ANIM_KEYS.size():
+		m.set_shader_parameter(ANIM_KEYS[ai], an[ai])
 	if textures.has(key):
 		m.set_shader_parameter("tex", textures[key])
 		m.set_shader_parameter("use_tex", 1.0)

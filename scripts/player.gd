@@ -97,8 +97,8 @@ func reset() -> void:
 	model.rotation = Vector3.ZERO
 	model.visible = true
 	cam_yaw = 0.0
-	cam_pitch = -0.6
-	cam_dist = 9.5
+	cam_pitch = -0.44
+	cam_dist = 6.8
 	look_shift = 0.0
 	facing = 0.0
 	model_tilt = 0.0
@@ -306,6 +306,9 @@ func update(dt: float) -> void:
 	blob.position = Vector3(pos.x, 0.04, pos.z)
 	var bs := clampf(1.0 - pos.y * 0.12, 0.4, 1.0)
 	blob.scale = Vector3(bs, 1, bs)
+	# close behind the keeper while the field is quiet, pulling back as the swarm thickens
+	var want_d := 6.8 + 3.0 * clampf(main.enemies.count / 170.0, 0.0, 1.0)
+	cam_dist = lerpf(cam_dist, want_d, minf(1.0, dt * 0.8))
 	_update_camera(dt)
 
 func _slide_damage() -> void:
