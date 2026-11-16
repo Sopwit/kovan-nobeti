@@ -754,7 +754,7 @@ func _pop(x: float, z: float, hits_player: bool) -> void:
 	main.fx.explosion(Vector3(x, 0.3, z), POP_R, Color(1.0, 0.55, 0.1))
 	main.audio.play("explosion", -5.0, randf_range(1.1, 1.3))
 	main.fx.shake(0.22)
-	var amount: float = 13.0 * main.game.hp_scale()
+	var amount: float = 9.0 * main.game.hp_scale()
 	for j in query(x, z, POP_R):
 		if dead[j] == 1 or typ[j] == T_BOSS:
 			continue

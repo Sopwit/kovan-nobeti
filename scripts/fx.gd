@@ -18,7 +18,7 @@ var hurt_rect: ColorRect
 var hurt_a := 0.0
 var hit_budget := 0
 # ground marks: soil where something dug out, goo where something died. A ring buffer on one MultiMesh.
-const DMAX := 220
+const DMAX := 420
 var decal_mm: MultiMesh
 var decal_t := PackedFloat32Array()
 var decal_life := PackedFloat32Array()

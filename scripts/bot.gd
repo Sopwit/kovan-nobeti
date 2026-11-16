@@ -133,6 +133,12 @@ func update(dt: float) -> void:
 				best_dir = dir
 		last_dir = best_dir
 	pl.bot_move = last_dir
+	# the hive call is spent like a player would: when cornered, when hurt, or on a champion
+	if main.game.ult >= 1.0:
+		var big: int = en.boss_index() if en.boss_index() >= 0 else en.champ_index()
+		var big_near: bool = big >= 0 and p.distance_to(Vector2(en.px[big], en.pz[big])) < 12.0
+		if close >= 5 or pl.hp < pl.max_hp * 0.45 or big_near:
+			main.game.try_ult()
 	if pl.on_ground and close >= 2 and randf() < dt * 2.5:
 		pl.bot_jump = true
 	if close >= 4 and randf() < dt * 2.0:

@@ -45,6 +45,12 @@ var end_menu: Button
 var menu_btns: Array[Button] = []
 var settings_ok: Button
 var end_lock := 0.0
+var reroll_btn: Button
+var hive_panel: Control
+var hive_btn: Button
+var hive_back: Button
+var hive_honey: Label
+var hive_tiles: Array = []
 
 func setup(m) -> void:
 	main = m
@@ -73,13 +79,14 @@ func setup(m) -> void:
 	hud.draw.connect(_draw_hud)
 	root.add_child(hud)
 	main.fx.attach_ui(num_layer, hurt)
-	for i in 20:
+	for i in 40:
 		icons[i] = main.assets.icon(i)
 	_build_choice()
 	_build_menu()
 	_build_pause()
 	_build_end()
 	_build_settings_overlay()
+	_build_hive()
 
 # ---------- helpers
 
@@ -198,6 +205,9 @@ func _settings_rows(parent: Container) -> void:
 	_slider_row(parent, "Müzik", "music", 0.0, 1.0)
 	_slider_row(parent, "Efekt sesi", "sfx", 0.0, 1.0)
 	_slider_row(parent, "Parlaklık", "brightness", 0.6, 1.5)
+	var fb := _button("Tam ekran (F11)", func(): main.toggle_fullscreen())
+	fb.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	parent.add_child(fb)
 
 func _sync_sliders() -> void:
 	for key in sliders:
@@ -240,8 +250,154 @@ func close_settings() -> void:
 	main.save_settings()
 	for b in menu_btns:
 		b.focus_mode = Control.FOCUS_ALL
-	if menu.visible and menu_btns.size() > 1:
-		menu_btns[1].grab_focus()
+	if menu.visible and menu_btns.size() > 2:
+		menu_btns[2].grab_focus()
+
+# ---------- the apiary: permanent upgrades bought with honey
+
+func _build_hive() -> void:
+	hive_panel = Control.new()
+	hive_panel.set_anchors_preset(Control.PRESET_FULL_RECT)
+	hive_panel.visible = false
+	root.add_child(hive_panel)
+	hive_panel.add_child(_dim(0.74))
+	var cc := CenterContainer.new()
+	cc.set_anchors_preset(Control.PRESET_FULL_RECT)
+	hive_panel.add_child(cc)
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 26)
+	cc.add_child(v)
+	var top := HBoxContainer.new()
+	top.add_theme_constant_override("separation", 14)
+	v.add_child(top)
+	var title := _label("ARILIK", 64, AMBER)
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	top.add_child(title)
+	var coin := TextureRect.new()
+	coin.texture = icons.get(24)
+	coin.custom_minimum_size = Vector2(64, 64)
+	coin.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	coin.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	top.add_child(coin)
+	hive_honey = _label("0", 52, CREAM)
+	top.add_child(hive_honey)
+	var grid := GridContainer.new()
+	grid.columns = 2
+	grid.add_theme_constant_override("h_separation", 24)
+	grid.add_theme_constant_override("v_separation", 20)
+	v.add_child(grid)
+	for def in main.game.META:
+		var b := Button.new()
+		b.custom_minimum_size = Vector2(800, 136)
+		b.add_theme_stylebox_override("normal", _style(Color(0.08, 0.1, 0.2, 0.96), Color(0.3, 0.36, 0.6), 3, 20))
+		b.add_theme_stylebox_override("hover", _style(Color(0.13, 0.16, 0.3, 0.98), AMBER, 4, 20))
+		b.add_theme_stylebox_override("focus", _style(Color(0.13, 0.16, 0.3, 0.98), AMBER, 4, 20))
+		b.add_theme_stylebox_override("pressed", _style(Color(0.2, 0.2, 0.3, 0.98), CREAM, 4, 20))
+		b.add_theme_stylebox_override("disabled", _style(Color(0.07, 0.08, 0.14, 0.94), Color(0.2, 0.22, 0.34), 3, 20))
+		var id: String = def.id
+		b.pressed.connect(func(): _buy(id))
+		grid.add_child(b)
+		var row := HBoxContainer.new()
+		row.set_anchors_preset(Control.PRESET_FULL_RECT)
+		row.offset_left = 20
+		row.offset_right = -26
+		row.offset_top = 14
+		row.offset_bottom = -14
+		row.add_theme_constant_override("separation", 22)
+		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		b.add_child(row)
+		var badge := PanelContainer.new()
+		badge.custom_minimum_size = Vector2(104, 104)
+		badge.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		var bs := _style(Color(1.0, 0.74, 0.16, 0.14), Color(1.0, 0.74, 0.16, 0.5), 2, 18)
+		bs.set_content_margin_all(8)
+		badge.add_theme_stylebox_override("panel", bs)
+		badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row.add_child(badge)
+		var ic := TextureRect.new()
+		ic.texture = icons.get(def.icon)
+		ic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		ic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		ic.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		badge.add_child(ic)
+		var mid := VBoxContainer.new()
+		mid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		mid.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		mid.add_theme_constant_override("separation", 4)
+		mid.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row.add_child(mid)
+		mid.add_child(_label(def.name, 32, CREAM))
+		mid.add_child(_label(def.desc, 24, Color(0.82, 0.86, 1.0), false))
+		var pips := HBoxContainer.new()
+		pips.add_theme_constant_override("separation", 6)
+		pips.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		mid.add_child(pips)
+		var pip_list: Array = []
+		for k in def.cost.size():
+			var pip := ColorRect.new()
+			pip.custom_minimum_size = Vector2(34, 10)
+			pip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			pips.add_child(pip)
+			pip_list.append(pip)
+		var price := HBoxContainer.new()
+		price.add_theme_constant_override("separation", 8)
+		price.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		price.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row.add_child(price)
+		var pc := TextureRect.new()
+		pc.texture = icons.get(24)
+		pc.custom_minimum_size = Vector2(44, 44)
+		pc.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		pc.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		pc.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		price.add_child(pc)
+		var cost := _label("", 36, AMBER)
+		price.add_child(cost)
+		hive_tiles.append({"def": def, "button": b, "pips": pip_list, "cost": cost, "coin": pc})
+	hive_back = _button("Geri", func(): close_hive())
+	hive_back.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	v.add_child(hive_back)
+
+func _refresh_hive() -> void:
+	hive_honey.text = fmt_int(main.honey)
+	for t in hive_tiles:
+		var def: Dictionary = t.def
+		var lv := int(main.meta.get(def.id, 0))
+		var full: bool = lv >= def.cost.size()
+		for k in t.pips.size():
+			(t.pips[k] as ColorRect).color = AMBER if k < lv else Color(0.2, 0.24, 0.4)
+		t.coin.visible = not full
+		t.cost.text = "TAM" if full else str(def.cost[lv])
+		var can: bool = not full and main.honey >= int(def.cost[lv])
+		t.cost.add_theme_color_override("font_color", TEAL if full else (AMBER if can else Color(0.6, 0.6, 0.68)))
+		t.button.disabled = not can
+
+func _buy(id: String) -> void:
+	if main.buy_meta(id):
+		main.audio.play("chest", -4.0, 1.2)
+		_refresh_hive()
+
+func open_hive() -> void:
+	for b in menu_btns:
+		b.focus_mode = Control.FOCUS_NONE
+	_refresh_hive()
+	menu.visible = false
+	hive_panel.visible = true
+	hive_back.grab_focus()
+
+func close_hive() -> void:
+	if not hive_panel.visible:
+		return
+	hive_panel.visible = false
+	for b in menu_btns:
+		b.focus_mode = Control.FOCUS_ALL
+	_menu_texts()
+	if main.state == main.MENU:
+		menu.visible = true
+		hive_btn.grab_focus()
+
+func _menu_texts() -> void:
+	hive_btn.text = "Arılık  ·  %s bal" % fmt_int(main.honey)
 
 # ---------- main menu
 
@@ -256,8 +412,8 @@ func _build_menu() -> void:
 	menu.add_child(shade)
 	var v := VBoxContainer.new()
 	v.set_anchors_preset(Control.PRESET_CENTER_LEFT)
-	v.position = Vector2(140, -330)
-	v.add_theme_constant_override("separation", 16)
+	v.position = Vector2(140, -420)
+	v.add_theme_constant_override("separation", 14)
 	menu.add_child(v)
 	var t1 := _label("KOVAN", 150, AMBER)
 	var t2 := _label("NÖBETİ", 150, CREAM)
@@ -271,13 +427,16 @@ func _build_menu() -> void:
 	v.add_child(sp)
 	var start := _button("Başla", func(): main.start_run(), true)
 	start.name = "Basla"
-	for b in [start, _button("Ayarlar", func(): open_settings()), _button("Çıkış", func(): main.quit_game())]:
+	hive_btn = _button("Arılık", func(): open_hive())
+	for b in [start, hive_btn, _button("Ayarlar", func(): open_settings()), _button("Çıkış", func(): main.quit_game())]:
 		b.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 		v.add_child(b)
 		menu_btns.append(b)
 
 func show_menu() -> void:
 	close_settings()
+	close_hive()
+	_menu_texts()
 	menu.visible = true
 	hud.visible = false
 	pause_panel.visible = false
@@ -415,10 +574,23 @@ func _build_choice() -> void:
 		ds.size_flags_vertical = Control.SIZE_EXPAND_FILL
 		box.add_child(ds)
 		cards.append({"button": b, "icon": icon, "name": nm, "level": lv, "desc": ds, "pair": pair, "pair_icon": pair_icon})
+	# a few times per run the three cards can be drawn again
+	reroll_btn = _button("Yenile", func(): _reroll())
+	reroll_btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	reroll_btn.focus_mode = Control.FOCUS_NONE
+	v.add_child(reroll_btn)
 
-func show_choice(kind: String, list: Array) -> void:
+func _reroll() -> void:
+	if not choosing or choice_lock > 0.0 or main.game.rerolls <= 0:
+		return
+	main.game.rerolls -= 1
+	show_choice(choice_kind, main.game.choices(), true)
+
+func show_choice(kind: String, list: Array, again := false) -> void:
 	choosing = true
-	choice_lock = 0.45
+	choice_lock = 0.25 if again else 0.45
+	reroll_btn.text = "Yenile (R)  ·  %d" % main.game.rerolls
+	reroll_btn.disabled = main.game.rerolls <= 0
 	bot_t = 0.25
 	card_data = list
 	choice_kind = kind
@@ -457,6 +629,8 @@ func show_choice(kind: String, list: Array) -> void:
 		c.level.add_theme_color_override("font_color", TEAL if u.kind == "p" else AMBER)
 		c.name.add_theme_color_override("font_color", AMBER if u.kind == "e" else CREAM)
 	choice_panel.visible = true
+	if again:
+		return
 	choice_panel.modulate.a = 0.0
 	get_tree().paused = true
 	main.audio.play("chest" if kind == "chest" else "levelup")
@@ -552,6 +726,7 @@ func show_end(victory: bool, new_record: bool) -> void:
 	_stat_row(end_stats, "Alınan hasar", fmt_int(g.stats.taken))
 	_stat_row(end_stats, "Açılan sandık", str(g.stats.chests))
 	_stat_row(end_stats, "Uyanan sunak", "%d / 4" % g.stats.shrines)
+	_stat_row(end_stats, "Kazanılan bal", "+%d" % main.last_honey, AMBER)
 	if new_record:
 		_stat_row(end_stats, "Yeni rekor", fmt_time(g.time), AMBER)
 	# damage share per weapon, biggest first
@@ -627,6 +802,8 @@ func _input(ev: InputEvent) -> void:
 			_choose(1)
 		elif k == KEY_3 or k == KEY_KP_3:
 			_choose(2)
+		elif k == KEY_R:
+			_reroll()
 
 func start_hud() -> void:
 	close_settings()
@@ -687,6 +864,16 @@ func _draw_hud() -> void:
 	_text(hud, Vector2(hr.position.x, hr.position.y + 23), "%d / %d" % [int(ceil(pl.hp)), int(pl.max_hp)], 22, Color.WHITE, HORIZONTAL_ALIGNMENT_CENTER, hw)
 	var sl := 1.0 - clampf(pl.slide_cd / 1.0, 0.0, 1.0)
 	_bar(hud, Rect2(W * 0.5 - hw * 0.5, H - 36, hw, 8), sl, TEAL if sl >= 1.0 else Color(0.2, 0.5, 0.55))
+	# the hive call: fills with kills, glows when it is ready
+	var ur := Rect2(W * 0.5 + hw * 0.5 + 34, H - 96, 72, 72)
+	var ready: bool = g.ult >= 1.0
+	var beat := 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.008)
+	hud.draw_rect(ur.grow(4), Color(0.05, 0.07, 0.15, 0.85))
+	hud.draw_rect(Rect2(ur.position.x, ur.end.y - ur.size.y * g.ult, ur.size.x, ur.size.y * g.ult), Color(1.0, 0.74, 0.16, 0.45 + (0.25 * beat if ready else 0.0)))
+	if icons.get(22) != null:
+		hud.draw_texture_rect(icons[22], ur, false, Color(1, 1, 1, 1.0 if ready else 0.45))
+	hud.draw_rect(ur.grow(4), CREAM if ready else Color(0.5, 0.42, 0.2), false, 2.0 + (3.0 * beat if ready else 0.0))
+	_text(hud, Vector2(ur.position.x + 46, H - 22), "Q", 24, CREAM if ready else Color(0.6, 0.6, 0.66))
 	# weapons and traits
 	var x := 24.0
 	for id in main.weapons.IDS:
@@ -726,7 +913,7 @@ func _draw_hud() -> void:
 		_text(hud, Vector2(W * 0.5 - 600, H * 0.27), toast_text, int(46 * pop), Color(1.0, 0.9, 0.5, a), HORIZONTAL_ALIGNMENT_CENTER, 1200)
 	if hint_t > 0.0:
 		var ha := clampf(hint_t, 0.0, 1.0)
-		_text(hud, Vector2(W * 0.5 - 700, H - 120), "WASD koş     Boşluk zıpla     Shift kay     Silahlar kendi ateş eder", 26, Color(1, 1, 1, ha), HORIZONTAL_ALIGNMENT_CENTER, 1400)
+		_text(hud, Vector2(W * 0.5 - 700, H - 120), "WASD koş     Boşluk zıpla     Shift kay     Q dolunca Kovan Çağrısı", 26, Color(1, 1, 1, ha), HORIZONTAL_ALIGNMENT_CENTER, 1400)
 
 func _draw_minimap(W: float) -> void:
 	var c := Vector2(W - 128, 138)

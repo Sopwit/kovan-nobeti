@@ -2,6 +2,8 @@ extends Node
 # One run: clock, spawning, experience, upgrades, the boss and the end of the run.
 
 const BOSS_TIME := 600.0
+# a build is five weapons out of seven: once the belt is full, no new weapon is offered
+const MAX_WEAPONS := 5
 
 # kind "w" = weapon (desc per level), "p" = player trait (one desc, repeated per level)
 const UPG := [
@@ -10,6 +12,8 @@ const UPG := [
 	{"id": "bomba", "name": "Bal Bombası", "icon": 2, "max": 6, "kind": "w", "desc": ["Kalabalığın ortasına patlayan kavanoz atar", "+12 hasar", "+1 bomba", "Patlama %30 genişler", "%25 daha sık atılır", "+1 bomba, +22 hasar"]},
 	{"id": "igne", "name": "İğne Çarkı", "icon": 3, "max": 6, "kind": "w", "desc": ["Etrafında dönen 2 iğne düşmanları biçer", "+1 iğne", "+5 hasar", "+1 iğne, çark hızlanır", "Çark %25 genişler", "+2 iğne, +9 hasar"]},
 	{"id": "kivilcim", "name": "Polen Kıvılcımı", "icon": 4, "max": 6, "kind": "w", "desc": ["Düşmandan düşmana seken kıvılcım çakar", "+2 sekme", "+8 hasar", "%20 daha sık çakar", "+3 sekme", "Çift çakar, +14 hasar"]},
+	{"id": "kule", "name": "Nöbetçi Kovan", "icon": 20, "max": 6, "kind": "w", "desc": ["Bastığın yere iğne atan bir kovan diker", "+5 hasar", "+1 kovan", "Kovanlar %30 daha sık atar", "Menzil %30 genişler, +6 hasar", "+1 kovan, +8 hasar"]},
+	{"id": "iz", "name": "Bal İzi", "icon": 21, "max": 6, "kind": "w", "desc": ["Koşarken ardında bal bırakırsın, ize basan yavaşlar ve yanar", "+2 hasar", "İz 1,5 saniye daha kalır", "İz %30 genişler", "+3 hasar", "İz 1,5 saniye daha kalır, +4 hasar"]},
 	{"id": "kalp", "name": "Bal Kalbi", "icon": 5, "max": 5, "kind": "p", "desc": "+20 can, 20 can iyileşir"},
 	{"id": "cizme", "name": "Kanatlı Çizme", "icon": 6, "max": 5, "kind": "p", "desc": "+%8 koşu hızı"},
 	{"id": "miknatis", "name": "Mıknatıs", "icon": 7, "max": 5, "kind": "p", "desc": "+%35 toplama menzili"},
@@ -31,9 +35,23 @@ const EVO := {
 	"bomba": ["ofke", 3, "Bal Yağmuru", "+2 bomba, +30 hasar, patlama %25 genişler"],
 	"igne": ["cizme", 3, "Diken Fırtınası", "+4 iğne, +14 hasar, çark hızlanır"],
 	"kivilcim": ["saat", 3, "Polen Fırtınası", "+6 sekme, +20 hasar, %40 daha sık çakar"],
+	"kule": ["tulum", 2, "Kovan Kalesi", "+1 kovan, +12 hasar, sönen kovan patlar"],
+	"iz": ["miknatis", 3, "Alev Balı", "İz tutuşur: +8 hasar, izde ölen düşman patlar"],
 }
+# The apiary: permanent upgrades bought with honey between runs. cost[n] buys level n + 1.
+const META := [
+	{"id": "can", "name": "Sağlam Tulum", "icon": 36, "cost": [30, 60, 100, 150, 220], "desc": "+8 can"},
+	{"id": "guc", "name": "Keskin İğne", "icon": 31, "cost": [30, 60, 100, 150, 220], "desc": "+%4 hasar"},
+	{"id": "hiz", "name": "Hafif Çizme", "icon": 6, "cost": [30, 60, 100, 150, 220], "desc": "+%2 koşu hızı"},
+	{"id": "kepce", "name": "Geniş Kepçe", "icon": 7, "cost": [30, 60, 100, 150, 220], "desc": "+%8 toplama menzili"},
+	{"id": "bilgi", "name": "Bilge Arı", "icon": 30, "cost": [30, 60, 100, 150, 220], "desc": "+%4 tecrübe"},
+	{"id": "boru", "name": "Gür Boru", "icon": 22, "cost": [30, 60, 100, 150, 220], "desc": "Kovan Çağrısı %8 hızlı dolar"},
+	{"id": "zar", "name": "Zar", "icon": 23, "cost": [60, 120, 200], "desc": "+1 kart yenileme"},
+	{"id": "nefes", "name": "İkinci Nefes", "icon": 25, "cost": [250], "desc": "Turda bir kez ölümden dönersin"},
+]
 const HEAL_CARD := {"id": "sifa", "name": "Bal Kavanozu", "icon": 18, "max": 999, "kind": "p", "desc": "40 can iyileşir"}
-const SRC_NAMES := {"ari": "Arı Sürüsü", "tutsu": "Tütsü Halkası", "bomba": "Bal Bombası", "igne": "İğne Çarkı", "kivilcim": "Polen Kıvılcımı", "inis": "Ezici İniş", "kayis": "Dikenli Kayış", "sunak": "Sunak", "patlak": "Patlak Zinciri"}
+const SRC_NAMES := {"ari": "Arı Sürüsü", "tutsu": "Tütsü Halkası", "bomba": "Bal Bombası", "igne": "İğne Çarkı", "kivilcim": "Polen Kıvılcımı", "inis": "Ezici İniş", "kayis": "Dikenli Kayış", "sunak": "Sunak", "patlak": "Patlak Zinciri",
+	"kule": "Nöbetçi Kovan", "iz": "Bal İzi", "cagri": "Kovan Çağrısı", "nefes": "İkinci Nefes"}
 const KILL_COL := [Color(0.6, 0.25, 0.8), Color(0.95, 0.25, 0.2), Color(0.4, 0.3, 0.8), Color(1.0, 0.4, 0.7), Color(1.0, 0.2, 0.2),
 	Color(1.0, 0.6, 0.15), Color(0.65, 0.85, 0.2), Color(0.9, 0.2, 0.15), Color(0.2, 0.75, 0.7)]
 # when the two champions arrive, and what each is called
@@ -63,6 +81,11 @@ var next_log := 30.0
 var last_dealt := 0.0
 var last_kills := 0
 var champs_sent := 0
+# the hive call fills with kills (0..1); card rerolls and revives left in this run
+var ult := 0.0
+var ult_bank := 0.0
+var rerolls := 2
+var revives := 0
 # staged moments, timed in real seconds: [time left, kind, position, size]
 var cues: Array = []
 # slow motion for a staged moment: real seconds left and the factor
@@ -117,6 +140,14 @@ func start() -> void:
 	main.player.reset()
 	main.fx.reset()
 	main.audio.music("oyun1")
+	# what the apiary gives this run
+	ult = 0.0
+	ult_bank = 0.0
+	rerolls = 2 + main.meta_lv("zar")
+	revives = main.meta_lv("nefes")
+	main.player.max_hp = 100.0 + 8.0 * main.meta_lv("can")
+	main.player.hp = main.player.max_hp
+	_recalc()
 
 func _need(l: int) -> int:
 	return 4 + 5 * l + int(0.7 * l * l)
@@ -153,8 +184,14 @@ func choices() -> Array:
 	var pool: Array = []
 	var weights: Array = []
 	var evos: Array = []
+	var owned := 0
+	for wid in main.weapons.IDS:
+		if main.weapons.levels[wid] > 0:
+			owned += 1
 	for u in UPG:
 		var l := level_of(u.id)
+		if u.kind == "w" and l == 0 and owned >= MAX_WEAPONS:
+			continue
 		if l >= u.max:
 			# an earned evolution is always offered, never left to the draw
 			if u.kind == "w" and l == u.max and evo_ready(u.id) and evos.size() < 2:
@@ -216,18 +253,18 @@ func apply(id: String) -> void:
 func _recalc() -> void:
 	var pl = main.player
 	var w = main.weapons
-	pl.move_speed = 8.2 * (1.0 + 0.08 * passives.get("cizme", 0))
-	pl.pickup_r = 3.2 * (1.0 + 0.35 * passives.get("miknatis", 0))
+	pl.move_speed = 8.2 * (1.0 + 0.08 * passives.get("cizme", 0)) * (1.0 + 0.02 * main.meta_lv("hiz"))
+	pl.pickup_r = 3.2 * (1.0 + 0.35 * passives.get("miknatis", 0)) * (1.0 + 0.08 * main.meta_lv("kepce"))
 	pl.armor = 1.5 * passives.get("tulum", 0)
 	pl.regen = 0.5 * passives.get("yaprak", 0)
 	pl.stomp_lv = passives.get("inis", 0)
 	pl.slide_lv = passives.get("kayis", 0)
-	w.dmg_mult = 1.0 + 0.14 * passives.get("ofke", 0)
+	w.dmg_mult = (1.0 + 0.14 * passives.get("ofke", 0)) * (1.0 + 0.04 * main.meta_lv("guc"))
 	w.cd_mult = pow(0.91, passives.get("saat", 0))
 	w.area_mult = 1.0 + 0.12 * passives.get("menzil", 0)
 	w.extra_proj = passives.get("cogalt", 0)
 	w.crit = 0.05 + 0.08 * passives.get("nisan", 0)
-	xp_mult = 1.0 + 0.12 * passives.get("kitap", 0)
+	xp_mult = (1.0 + 0.12 * passives.get("kitap", 0)) * (1.0 + 0.04 * main.meta_lv("bilgi"))
 
 func add_xp(v: int) -> void:
 	# a run that has fallen behind the usual pace earns more per pickup, so a slow start is not a lost run
@@ -281,8 +318,34 @@ func on_damage_dealt(a: float, src: String) -> void:
 	stats.dealt += a
 	stats.by[src] = stats.by.get(src, 0.0) + a
 
+# Honey for the apiary: a little for every kill and minute, more for champions and the queen.
+func honey_for_run(won: bool) -> int:
+	return int(kills / 30.0 + time / 60.0 * 4.0) + 15 * int(stats.get("champs", 0)) + (60 if won else 0)
+
+# Share of the damage per source, biggest first: only for the bot telemetry.
+func _by_str() -> String:
+	var by: Dictionary = stats.by
+	var keys: Array = by.keys()
+	keys.sort_custom(func(a, b): return by[a] > by[b])
+	var s := ""
+	for k in keys:
+		s += "%s=%d%% " % [k, int(100.0 * by[k] / maxf(1.0, stats.dealt))]
+	return s
+
+func try_ult() -> bool:
+	if ult < 1.0 or over or not main.player.alive:
+		return false
+	ult = 0.0
+	stats.ults = stats.get("ults", 0) + 1
+	main.weapons.call_hive()
+	return true
+
 func on_enemy_killed(t: int, at: Vector3, elite: bool, s: float) -> void:
 	kills += 1
+	if ult < 1.0:
+		# about fifty seconds of ordinary killing fills it; the charge is banked and paid out at a
+		# limited pace (see update), so a build that mows the field cannot call every few seconds
+		ult_bank = minf(0.5, ult_bank + (1.0 + 0.08 * main.meta_lv("boru")) / (50.0 * (1.0 + time / 45.0)))
 	main.audio.play("kill", 0.0, randf_range(0.85, 1.2))
 	main.fx.burst(at + Vector3(0, 0.4, 0), KILL_COL[t], 8 + int(s * 3.0), 5.0 + s)
 	if t == main.enemies.T_BOSS:
@@ -326,11 +389,26 @@ func on_enemy_killed(t: int, at: Vector3, elite: bool, s: float) -> void:
 func on_player_dead() -> void:
 	if over:
 		return
+	if revives > 0:
+		# the apiary's second breath: back on your feet at half health, with room to move
+		revives -= 1
+		var pl = main.player
+		pl.alive = true
+		pl.hp = pl.max_hp * 0.5
+		pl.inv_t = 2.5
+		main.weapons.explode(pl.pos, 10.0, 60.0 * hp_scale(), "nefes")
+		main.weapons.push_back(pl.pos, 12.0, 22.0, false)
+		main.ui.banner("İKİNCİ NEFES", "Kovan seni geri çağırdı")
+		main.audio.play("shrine", 0.0, 0.9)
+		slow(0.6, 0.3)
+		return
 	if main.bot_mode:
 		print("T DEAD t=%d lv=%d kills=%d alive=%d edge=%d hits=%s w=%s p=%s" % [int(time), level, kills, main.enemies.count, int(main.world.ARENA_R - Vector2(main.player.pos.x, main.player.pos.z).length()), str(hits), str(main.weapons.levels.values()), str(passives)])
+	if main.bot_mode:
+		print("T BY %s" % _by_str())
 	over = true
 	victory = false
-	end_t = 1.6
+	end_t = 2.1
 	Engine.time_scale = 0.35
 	main.audio.play("defeat")
 
@@ -340,6 +418,7 @@ func _win(at: Vector3) -> void:
 		return
 	if main.bot_mode:
 		print("T WIN t=%d lv=%d kills=%d hp=%d hits=%s w=%s p=%s" % [int(time), level, kills, int(main.player.hp), str(hits), str(main.weapons.levels.values()), str(passives)])
+		print("T BY %s" % _by_str())
 	over = true
 	victory = true
 	# she does not just vanish: the camera turns to her, she shudders under a string of blasts, then bursts
@@ -456,6 +535,14 @@ func update(dt: float) -> void:
 		last_dealt = stats.dealt
 		last_kills = kills
 	if not over:
+		if ult < 1.0 and ult_bank > 0.0:
+			# never faster than one call every 38 seconds
+			var pay := minf(ult_bank, dt / 38.0)
+			ult_bank -= pay
+			ult = minf(1.0, ult + pay)
+			if ult >= 1.0:
+				main.audio.play("levelup", -6.0, 1.5)
+				hint("ult", "Kovan Çağrısı hazır, Q'ya bas")
 		_spawn(dt)
 		# the music follows the day: afternoon, golden hour, night
 		if time >= 220.0 and not boss_spawned and main.audio.current == "oyun1":
@@ -487,7 +574,7 @@ func _pick_type() -> int:
 	if time > 250.0 and r < minf(0.07, (time - 250.0) / 3500.0 + 0.03):
 		return en.T_HOP
 	r = randf()
-	if time > 130.0 and r < minf(0.07, (time - 130.0) / 3500.0 + 0.03):
+	if time > 130.0 and r < minf(0.05, (time - 130.0) / 5000.0 + 0.025):
 		return en.T_BOOM
 	r = randf()
 	if time > 170.0 and r < minf(0.11, (time - 170.0) / 2500.0 + 0.04):
@@ -597,7 +684,7 @@ func _spawn(dt: float) -> void:
 		mark_time = time
 	if time >= BOSS_TIME and not boss_spawned:
 		boss_spawned = true
-		var p4 := _ring_pos(20.0, 23.0)
+		var p4 := _ring_pos(16.0, 19.0)
 		# a fight of about a minute for any build: a strong one still ends it sooner
 		var recent := 40.0 * level
 		if time - mark_time > 5.0:

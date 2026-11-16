@@ -36,6 +36,13 @@ var state := MENU
 var paused := false
 var settings := {"sens": 1.0, "music": 0.9, "sfx": 0.8, "brightness": 1.0}
 var record := {"runs": 0, "best_time": 0.0, "best_kills": 0, "wins": 0}
+# the apiary: honey in the bank, levels of the permanent upgrades, honey earned by the last run
+var honey := 0
+var meta := {}
+var last_honey := 0
+# fullscreen is a choice for this session only: it is never saved and never applied at startup,
+# so nothing but the player's own key press or click changes the window
+var fullscreen := false
 var menu_yaw := 0.0
 # real seconds the simulation stays frozen after a heavy kill
 var hit_stop := 0.0
@@ -84,9 +91,15 @@ var debug_ui := "":
 		if v == "settings" and ui != null:
 			ui.open_settings()
 			return
+		if v == "hive" and ui != null:
+			ui.open_hive()
+			return
 		if game == null or state != PLAY:
 			return
-		if v == "choice":
+		if v == "ult":
+			game.ult = 1.0
+			game.try_ult()
+		elif v == "choice":
 			ui.hold_choice = true
 			game.queue.append("level")
 		elif v == "chest":
@@ -119,6 +132,7 @@ func _ready() -> void:
 	_load()
 	var want_time := -1.0
 	var want_levels := 0
+	var want_ui := ""
 	# the test flags only exist in debug builds: an exported release ignores them
 	var args := OS.get_cmdline_user_args() if OS.is_debug_build() else PackedStringArray()
 	for a in args:
@@ -134,6 +148,8 @@ func _ready() -> void:
 			want_time = float(a.split("=")[1])
 		elif a.begins_with("--levels="):
 			want_levels = int(a.split("=")[1])
+		elif a.begins_with("--ui="):
+			want_ui = a.split("=")[1]
 	assets = Assets.new()
 	audio = Audio.new()
 	add_child(audio)
@@ -175,12 +191,15 @@ func _ready() -> void:
 		start_run()
 		debug_time = want_time
 		debug_levels = want_levels
+		if want_ui != "":
+			debug_ui = want_ui
 
 func _setup_input() -> void:
 	var map := {
 		"move_left": [KEY_A, KEY_LEFT], "move_right": [KEY_D, KEY_RIGHT],
 		"move_fwd": [KEY_W, KEY_UP], "move_back": [KEY_S, KEY_DOWN],
 		"jump": [KEY_SPACE], "slide": [KEY_SHIFT, KEY_CTRL], "pause": [KEY_ESCAPE],
+		"ult": [KEY_Q], "fullscreen": [KEY_F11],
 	}
 	for action in map:
 		if not InputMap.has_action(action):
@@ -189,6 +208,10 @@ func _setup_input() -> void:
 			var ev := InputEventKey.new()
 			ev.physical_keycode = key
 			InputMap.action_add_event(action, ev)
+	# the hive call is also on the right mouse button
+	var mb := InputEventMouseButton.new()
+	mb.button_index = MOUSE_BUTTON_RIGHT
+	InputMap.action_add_event("ult", mb)
 
 func _num(v) -> bool:
 	return (typeof(v) == TYPE_FLOAT or typeof(v) == TYPE_INT) and is_finite(float(v))
@@ -215,13 +238,42 @@ func _load() -> void:
 					record[k] = v
 				else:
 					record[k] = int(v)
+	if _num(data.get("bal")):
+		honey = int(clampf(float(data["bal"]), 0.0, 1.0e7))
+	var a = data.get("arilik")
+	if typeof(a) == TYPE_DICTIONARY:
+		for def in Game.META:
+			if _num(a.get(def.id)):
+				meta[def.id] = clampi(int(a[def.id]), 0, def.cost.size())
 
 func save_settings() -> void:
 	if bot_mode:
 		return
 	var f := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
 	if f != null:
-		f.store_string(JSON.stringify({"ayarlar": settings, "rekor": record}, "\t"))
+		f.store_string(JSON.stringify({"ayarlar": settings, "rekor": record, "bal": honey, "arilik": meta}, "\t"))
+
+# Level of a permanent upgrade. The demo bot always plays without them, so balance runs stay comparable.
+func meta_lv(id: String) -> int:
+	return 0 if bot_mode else int(meta.get(id, 0))
+
+func buy_meta(id: String) -> bool:
+	for def in Game.META:
+		if def.id == id:
+			var lv := int(meta.get(id, 0))
+			if lv >= def.cost.size() or honey < int(def.cost[lv]):
+				return false
+			honey -= int(def.cost[lv])
+			meta[id] = lv + 1
+			save_settings()
+			return true
+	return false
+
+func toggle_fullscreen() -> void:
+	if bot_mode:
+		return
+	fullscreen = not fullscreen
+	DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN if fullscreen else DisplayServer.WINDOW_MODE_WINDOWED)
 
 func apply_settings() -> void:
 	audio.apply_volumes()
@@ -279,6 +331,8 @@ func leave_run() -> void:
 	record.runs += 1
 	record.best_time = maxf(record.best_time, game.time)
 	record.best_kills = maxi(record.best_kills, game.kills)
+	last_honey = game.honey_for_run(false)
+	honey += last_honey
 	save_settings()
 
 # Freezes the simulation for a moment. Ordinary heavy kills share a cooldown so a strong build
@@ -301,7 +355,9 @@ func _notification(what: int) -> void:
 func finish_run(victory: bool) -> void:
 	state = END
 	var new_record := false
+	last_honey = game.honey_for_run(victory)
 	if not bot_mode:
+		honey += last_honey
 		record.runs += 1
 		if victory:
 			record.wins += 1
@@ -320,9 +376,16 @@ func quit_game() -> void:
 	get_tree().quit()
 
 func _unhandled_input(ev: InputEvent) -> void:
-	if ev.is_action_pressed("pause"):
+	if ev.is_action_pressed("fullscreen"):
+		toggle_fullscreen()
+	elif ev.is_action_pressed("ult"):
+		if state == PLAY and not paused and not ui.choosing:
+			game.try_ult()
+	elif ev.is_action_pressed("pause"):
 		if ui.settings_overlay.visible:
 			ui.close_settings()
+		elif ui.hive_panel.visible:
+			ui.close_hive()
 		else:
 			toggle_pause()
 	elif ev is InputEventMouseMotion and state == PLAY and not paused and not ui.choosing and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:

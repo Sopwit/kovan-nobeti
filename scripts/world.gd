@@ -30,7 +30,7 @@ var flora_mats: Array = []
 var great_mat: ShaderMaterial
 var great_light: OmniLight3D
 # the great hive tree in the middle: Vector3(x, z, trunk radius)
-const GREAT := Vector3(0.0, 0.0, 5.0)
+const GREAT := Vector3(0.0, 0.0, 6.2)
 # time of day last applied (0 afternoon .. 1 night) and how much of the night has fallen
 var day := -1.0
 var night := 0.0
@@ -40,8 +40,8 @@ var night := 0.0
 # ambient energy, fog colour, night amount.
 const DAY := [
 	[0.00, 54.0, 38.0, Color(1.0, 0.96, 0.86), 1.15, Color(0.20, 0.48, 0.95), Color(0.70, 0.86, 1.0), Color(0.78, 0.86, 1.0), 0.5, Color(0.72, 0.86, 1.0), 0.0],
-	[0.33, 38.0, 62.0, Color(1.0, 0.92, 0.74), 1.15, Color(0.20, 0.45, 0.92), Color(0.80, 0.86, 0.92), Color(0.82, 0.85, 0.95), 0.5, Color(0.80, 0.86, 0.95), 0.0],
-	[0.52, 17.0, 84.0, Color(1.0, 0.72, 0.42), 1.3, Color(0.22, 0.36, 0.78), Color(1.0, 0.72, 0.45), Color(0.95, 0.78, 0.70), 0.5, Color(1.0, 0.75, 0.55), 0.0],
+	[0.33, 38.0, 62.0, Color(1.0, 0.95, 0.82), 1.15, Color(0.20, 0.45, 0.92), Color(0.80, 0.86, 0.92), Color(0.82, 0.85, 0.95), 0.5, Color(0.80, 0.86, 0.95), 0.0],
+	[0.52, 17.0, 84.0, Color(1.0, 0.8, 0.56), 1.2, Color(0.22, 0.36, 0.78), Color(1.0, 0.72, 0.45), Color(0.95, 0.78, 0.70), 0.5, Color(1.0, 0.75, 0.55), 0.0],
 	[0.66, 6.0, 98.0, Color(1.0, 0.45, 0.28), 1.0, Color(0.16, 0.18, 0.50), Color(0.95, 0.45, 0.35), Color(0.75, 0.60, 0.85), 0.6, Color(0.80, 0.50, 0.55), 0.35],
 	[0.76, -5.0, 106.0, Color(1.0, 0.40, 0.30), 0.0, Color(0.06, 0.08, 0.28), Color(0.40, 0.30, 0.55), Color(0.50, 0.55, 0.95), 0.7, Color(0.30, 0.30, 0.55), 0.85],
 	[1.00, -20.0, 120.0, Color(1.0, 0.40, 0.30), 0.0, Color(0.03, 0.05, 0.20), Color(0.16, 0.22, 0.45), Color(0.50, 0.60, 1.0), 0.68, Color(0.14, 0.20, 0.42), 1.0],
@@ -514,7 +514,7 @@ func _build_scenery() -> void:
 		gh.mesh = main.assets.prop_mesh("anakovan")
 		great_mat = main.assets.great_hive_material()
 		gh.material_override = great_mat
-		gh.scale = Vector3.ONE * 20.0
+		gh.scale = Vector3.ONE * 17.0
 		gh.position = Vector3(GREAT.x, -0.2, GREAT.y)
 		add_child(gh)
 		great_light = OmniLight3D.new()
@@ -522,7 +522,7 @@ func _build_scenery() -> void:
 		great_light.omni_range = 24.0
 		great_light.omni_attenuation = 1.2
 		great_light.light_energy = 0.4
-		great_light.position = Vector3(GREAT.x, 7.0, GREAT.y + 7.5)
+		great_light.position = Vector3(GREAT.x, 6.0, GREAT.y + 7.0)
 		add_child(great_light)
 		obstacles.append(GREAT)
 	var xfs: Array = []

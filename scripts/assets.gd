@@ -36,6 +36,7 @@ var enemy_shader: Shader
 var _aura_shader: Shader
 var _blob: Texture2D
 var icon_sheet: Texture2D
+var icon_sheet2: Texture2D
 var retarget_info := {}
 var enemy_mats: Array = []
 
@@ -114,6 +115,8 @@ void fragment() {
 """
 	if ResourceLoader.exists("res://assets/tex/ikonlar.png"):
 		icon_sheet = load("res://assets/tex/ikonlar.png")
+	if ResourceLoader.exists("res://assets/tex/ikonlar2.png"):
+		icon_sheet2 = load("res://assets/tex/ikonlar2.png")
 
 func _find_mesh_instances(n: Node, out: Array) -> void:
 	if n is MeshInstance3D and n.mesh != null:
@@ -267,6 +270,8 @@ const CLIPS := {
 	"idle": ["arici_idle", 0.0, 1.0, 0.0, true, 43.4],
 	"jump": ["arici_jump", 0.36, 0.58, 0.6, false, 43.2],
 	"slide": ["arici_slide", 0.14, 0.5, 0.42, false, -15.0],
+	"die": ["arici_die", 0.0, 1.0, 1.7, false, 43.0],
+	"cheer": ["arici_cheer", 0.0, 1.0, 0.0, true, 43.0],
 }
 
 # The extra clips were rigged by separate jobs and their skeletons differ from the main one
@@ -553,12 +558,15 @@ func blob_texture() -> Texture2D:
 
 # Icons come from one generated 5x4 sheet; the ragged tile border of each cell is cropped away.
 func icon(i: int) -> Texture2D:
-	if icon_sheet == null:
+	# 0 to 19 are on the first sheet, 20 to 39 on the second
+	var sheet := icon_sheet if i < 20 else icon_sheet2
+	if sheet == null:
 		return null
+	i = i % 20
 	var a := AtlasTexture.new()
-	a.atlas = icon_sheet
-	var cw := icon_sheet.get_width() / 5.0
-	var ch := icon_sheet.get_height() / 4.0
+	a.atlas = sheet
+	var cw := sheet.get_width() / 5.0
+	var ch := sheet.get_height() / 4.0
 	var m := 0.11
 	@warning_ignore("integer_division")
 	var row := i / 5

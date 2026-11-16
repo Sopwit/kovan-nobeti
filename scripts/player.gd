@@ -78,7 +78,7 @@ func setup(m) -> void:
 
 func reset() -> void:
 	# in front of the great hive, on the plaza
-	pos = Vector3(0, 0, 10.0)
+	pos = Vector3(0, 0, 11.5)
 	vel = Vector3.ZERO
 	hp = 100.0
 	max_hp = 100.0
@@ -99,7 +99,8 @@ func reset() -> void:
 	model.visible = true
 	cam_yaw = 0.0
 	cam_pitch = -0.44
-	cam_dist = 6.8
+	# a run opens wide on the great hive and settles in behind the keeper
+	cam_dist = 15.0 if main.state == main.PLAY else 6.8
 	look_shift = 0.0
 	focus_t = 0.0
 	facing = 0.0
@@ -113,7 +114,8 @@ func menu_idle(dt: float) -> void:
 	cam_dist = 6.2
 	look_shift = -2.0
 	if alive:
-		_play("idle")
+		# on the end screen of a won run the keeper celebrates
+		_play("cheer" if (main.state == main.END and main.game.victory and anim != null and anim.has_animation("cheer")) else "idle", 0.25)
 		model.rotation = Vector3(0, facing, 0)
 	model.visible = true
 	position = pos
@@ -185,7 +187,14 @@ func sliding() -> bool:
 
 func update(dt: float) -> void:
 	if not alive:
-		model.rotation.x = lerpf(model.rotation.x, -PI * 0.5, minf(1.0, dt * 6.0))
+		model.visible = true
+		if anim != null and anim.has_animation("die"):
+			# the fall plays at full speed even though the world has dropped into slow motion
+			_play("die", 0.05)
+			anim.speed_scale = 1.0 / maxf(0.05, Engine.time_scale)
+			model.rotation.x = 0.0
+		else:
+			model.rotation.x = lerpf(model.rotation.x, -PI * 0.5, minf(1.0, dt * 6.0))
 		_update_camera(dt)
 		return
 	if inv_t > 0.0:
@@ -318,7 +327,8 @@ func update(dt: float) -> void:
 	blob.scale = Vector3(bs, 1, bs)
 	# close behind the keeper while the field is quiet, pulling back as the swarm thickens
 	var want_d := 6.8 + 3.0 * clampf(main.enemies.count / 170.0, 0.0, 1.0)
-	cam_dist = lerpf(cam_dist, want_d, minf(1.0, dt * 0.8))
+	# the opening wide shot closes in faster than the camera breathes with the crowd
+	cam_dist = lerpf(cam_dist, want_d, minf(1.0, dt * (2.2 if cam_dist > 10.5 else 0.8)))
 	_update_camera(dt)
 
 func _slide_damage() -> void:
