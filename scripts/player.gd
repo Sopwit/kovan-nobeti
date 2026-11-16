@@ -176,8 +176,9 @@ func focus_on(p: Vector3, secs: float) -> void:
 	focus_pos = p
 	focus_t = secs
 
-func hold_camera(dt: float) -> void:
-	_update_camera(dt)
+# Takes real seconds (the world is held still); the camera code expects scaled time and converts back itself.
+func hold_camera(real: float) -> void:
+	_update_camera(real * Engine.time_scale)
 
 func heal(a: float) -> void:
 	hp = minf(max_hp, hp + a)

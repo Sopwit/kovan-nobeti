@@ -589,6 +589,8 @@ func _reroll() -> void:
 func show_choice(kind: String, list: Array, again := false) -> void:
 	choosing = true
 	choice_lock = 0.25 if again else 0.45
+	# a slow motion beat must not slow the panel too: the game picks it up again when the tree resumes
+	Engine.time_scale = main.debug_speed
 	reroll_btn.text = "Yenile (R)  ·  %d" % main.game.rerolls
 	reroll_btn.disabled = main.game.rerolls <= 0
 	bot_t = 0.25
@@ -815,6 +817,7 @@ func start_hud() -> void:
 	hud.visible = true
 	hint_t = 14.0
 	toast_t = 0.0
+	banner_t = 0.0
 
 func _text(c: CanvasItem, pos: Vector2, s: String, size: int, col: Color, align := HORIZONTAL_ALIGNMENT_LEFT, width := -1.0) -> void:
 	# every distinct size makes the font build another glyph atlas, so animated sizes move in coarse steps

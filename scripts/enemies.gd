@@ -419,7 +419,8 @@ func hurt(i: int, amount: float, kx: float, kz: float, src: String, crit := fals
 	vx[i] += kx * kb
 	vz[i] += kz * kb
 	main.game.on_damage_dealt(amount, src)
-	if t == T_BOSS:
+	if t == T_BOSS and src != "cagri" and src != "nefes":
+		# blasts that take a share of her health say nothing about the build, so the probe ignores them
 		main.game.boss_taken += amount
 	main.fx.number(Vector3(px[i], height_of(i) + scl[i] * 0.7, pz[i]), amount, crit)
 	if hp[i] <= 0.0:
@@ -435,7 +436,11 @@ func hurt(i: int, amount: float, kx: float, kz: float, src: String, crit := fals
 			boss_uid = -1
 			tele_node.visible = false
 		elif t >= T_STAG:
+			# the bar passes to the other champion if one still stands
 			champ_uid = -1
+			for j in count:
+				if j != i and typ[j] >= T_STAG and dead[j] == 0:
+					champ_uid = uid[j]
 		elif t == T_BOOM:
 			# shot down, it still bursts: only the swarm around it pays
 			pops.append([px[i], pz[i], 0.12, 0])
@@ -444,7 +449,7 @@ func hurt(i: int, amount: float, kx: float, kz: float, src: String, crit := fals
 	return false
 
 func slow(i: int, t: float) -> void:
-	if typ[i] != T_BOSS:
+	if typ[i] != T_BOSS and typ[i] < T_STAG:
 		slow_t[i] = maxf(slow_t[i], t)
 
 func fire_bullet(x: float, z: float, dx: float, dz: float, speed: float, damage: float) -> void:
@@ -822,22 +827,25 @@ func _stag_update(i: int, dt: float, nx: float, nz: float, d: float, ply: float)
 				timer[i] = 0.7 if angry else 0.9
 				ax[i] = nx
 				az[i] = nz
-				main.fx.warn_lane(px[i], pz[i], atan2(nx, nz), 2.0, 18.0, timer[i])
+				main.fx.warn_lane(px[i], pz[i], atan2(nx, nz), 2.4, 18.0, timer[i])
 				main.audio.play("boss_roar", -4.0, 1.35)
 				main.game.hint("makas", "Makas kırmızı şeritten hücum eder, yana kaç")
 			elif d > rad[i] + 0.4:
-				return Vector2(nx, nz) * spd[i]
+				return Vector2(nx, nz) * spd[i] * (0.4 if born[i] > 0.0 else 1.0)
 		1:
 			flash[i] = 0.3 + 0.3 * sin(time * 30.0)
 			if timer[i] <= 0.0:
 				st[i] = 2
 				timer[i] = 0.62
 				main.audio.play("slide", 0.0, 0.6)
+				# the lane stays lit for the rush itself and fills as the beetle runs it
+				main.fx.warn_lane(px[i], pz[i], atan2(ax[i], az[i]), 2.4, 18.0, 0.62)
 			# it leans back before the rush
 			return Vector2(-ax[i], -az[i]) * 1.2
 		2:
-			if d < rad[i] + 1.0 and ply < 1.3 and atk_cd[i] <= 0.0:
-				if main.player.hurt(dmg[i] * 1.5, px[i], pz[i]):
+			# the hit reaches exactly as far as the lane that was drawn
+			if d < rad[i] + 0.7 and ply < 1.3 and atk_cd[i] <= 0.0:
+				if main.player.hurt(dmg[i] * 1.3, px[i], pz[i]):
 					atk_cd[i] = 0.75
 					main.game.note_hit("makas")
 			if timer[i] <= 0.0:
@@ -914,6 +922,9 @@ func _update_bullets(dt: float, plx: float, plz: float, ply: float) -> void:
 			if pl.hurt(bdmg[i], bx[i], bz[i]):
 				gone = true
 				main.game.note_hit("mermi")
+			if bcount == 0:
+				# the hit ended the run and the field was cleared under this loop
+				return
 		if gone:
 			var l := bcount - 1
 			bx[i] = bx[l]; bz[i] = bz[l]; bvx[i] = bvx[l]; bvz[i] = bvz[l]

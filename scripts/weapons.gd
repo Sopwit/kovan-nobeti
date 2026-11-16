@@ -365,7 +365,7 @@ func _update_trail(dt: float, p: Vector3) -> void:
 		if timers.iz <= 0.0:
 			# every chaser ends up walking through the trail, so each tick is small
 			timers.iz = 0.4
-			var d := 3.0 + 2.0 * b(l >= 2) + 3.0 * b(l >= 5) + 4.0 * b(l >= 6) + 8.0 * b(l >= 7)
+			var d := 5.0 + 2.0 * b(l >= 2) + 3.0 * b(l >= 5) + 4.0 * b(l >= 6) + 8.0 * b(l >= 7)
 			var seen := {}
 			var bursts := 0
 			for t in trail:

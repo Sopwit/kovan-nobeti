@@ -150,6 +150,10 @@ func _ready() -> void:
 			want_levels = int(a.split("=")[1])
 		elif a.begins_with("--ui="):
 			want_ui = a.split("=")[1]
+	if not bot_mode:
+		# a hand-played run writes the real save, so the cheats only work for the bot
+		debug_god = false
+		debug_speed = 1.0
 	assets = Assets.new()
 	audio = Audio.new()
 	add_child(audio)
@@ -244,14 +248,24 @@ func _load() -> void:
 	if typeof(a) == TYPE_DICTIONARY:
 		for def in Game.META:
 			if _num(a.get(def.id)):
-				meta[def.id] = clampi(int(a[def.id]), 0, def.cost.size())
+				meta[def.id] = int(clampf(float(a[def.id]), 0.0, float(def.cost.size())))
 
 func save_settings() -> void:
 	if bot_mode:
 		return
-	var f := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
+	var text := JSON.stringify({"ayarlar": settings, "rekor": record, "bal": honey, "arilik": meta}, "\t")
+	# written beside the save and swapped in, so a crash mid-write cannot truncate honey and upgrades
+	var tmp := SAVE_PATH + ".tmp"
+	var f := FileAccess.open(tmp, FileAccess.WRITE)
 	if f != null:
-		f.store_string(JSON.stringify({"ayarlar": settings, "rekor": record, "bal": honey, "arilik": meta}, "\t"))
+		f.store_string(text)
+		f.close()
+		if DirAccess.rename_absolute(tmp, SAVE_PATH) == OK:
+			return
+	# no swap on this platform: write in place as before
+	f = FileAccess.open(SAVE_PATH, FileAccess.WRITE)
+	if f != null:
+		f.store_string(text)
 
 # Level of a permanent upgrade. The demo bot always plays without them, so balance runs stay comparable.
 func meta_lv(id: String) -> int:
