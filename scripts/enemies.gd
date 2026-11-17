@@ -106,6 +106,12 @@ var boss_dirx := 0.0
 var boss_dirz := 0.0
 var boss_attack_i := 0
 var boss_rings_left := 0
+# the order of her moves (1 charge, 2 slam, 5 leap, 3 spit ring, 0 wasps); the second half opens with the venom rain (4)
+const BOSS_CYCLE := [1, 2, 5, 3, 0]
+const BOSS_CYCLE_RAGE := [4, 1, 5, 2, 3, 0]
+const LEAP_R := 5.5
+var boss_leap := Vector2.ZERO
+var boss_leap_t := 1.0
 var rings: Array = []
 var ring_nodes: Array[MeshInstance3D] = []
 var tele_node: MeshInstance3D
@@ -975,25 +981,39 @@ func _update_rings(dt: float, plx: float, plz: float, ply: float) -> void:
 func _boss_y() -> float:
 	if boss_state == 3:
 		return maxf(0.0, sin(clampf(1.0 - boss_t / 1.0, 0.0, 1.0) * PI)) * 3.5
+	if boss_state == 5:
+		return maxf(0.0, sin(clampf(1.0 - boss_t / boss_leap_t, 0.0, 1.0) * PI)) * 5.5
 	return 0.0
 
-# Boss brain. States: 0 chase, 1 charge windup, 2 charging, 3 slam windup, 4 recover.
+# Boss brain. States: 0 chase, 1 charge windup, 2 charging, 3 slam windup, 4 recover, 5 leaping.
 func _boss_update(i: int, dt: float, nx: float, nz: float, d: float) -> Vector2:
 	boss_t -= dt
 	var enraged := hp[i] < maxhp[i] * 0.5
 	if enraged and not boss_raged and not main.game.over:
 		boss_raged = true
 		# her first move in the second half is the new one
-		boss_attack_i = 3
+		boss_attack_i = 0
 		main.game.boss_rage(Vector3(px[i], 0, pz[i]))
 	match boss_state:
 		0:
 			tele_node.visible = false
 			if boss_t <= 0.0:
+				var cycle: Array = BOSS_CYCLE_RAGE if enraged else BOSS_CYCLE
+				var pick: int = cycle[boss_attack_i % cycle.size()]
 				boss_attack_i += 1
-				# the second half of the fight adds a fifth attack to the cycle
-				var pick := boss_attack_i % (5 if enraged else 4)
-				if pick == 4:
+				if pick == 5:
+					# the leap: she comes down where the keeper is heading, and the circle on the ground says where
+					var lv: Vector3 = main.player.vel
+					boss_leap = Vector2(main.player.pos.x + lv.x * 0.5, main.player.pos.z + lv.z * 0.5).limit_length(float(main.world.ARENA_R) - 6.0)
+					boss_state = 5
+					boss_leap_t = 1.0 if enraged else 1.2
+					boss_t = boss_leap_t
+					main.fx.warn(boss_leap.x, boss_leap.y, LEAP_R, boss_leap_t)
+					main.audio.play("boss_roar", 0.0, 1.2)
+					main.game.hint("sicrama", "Kraliçe işaretli daireye iner, dışına çık")
+					if main.bot_mode:
+						print("T BOSS leap t=%.1f far=%.1f" % [main.game.time, Vector2(px[i], pz[i]).distance_to(boss_leap)])
+				elif pick == 4:
 					# venom rain: marked circles around the keeper and on the way they are running
 					var pv: Vector3 = main.player.vel
 					for k in 7:
@@ -1084,6 +1104,28 @@ func _boss_update(i: int, dt: float, nx: float, nz: float, d: float) -> Vector2:
 				boss_state = 0
 				boss_t = 1.6 if enraged else 2.4
 			return Vector2.ZERO
+		5:
+			tele_node.visible = false
+			if boss_t <= 0.0:
+				px[i] = boss_leap.x
+				pz[i] = boss_leap.y
+				# she is stuck where she lands for a moment: the opening to hit back
+				boss_state = 4
+				boss_t = 1.1
+				main.fx.shake(0.9)
+				main.fx.burst(Vector3(px[i], 0.3, pz[i]), Color(1.0, 0.5, 0.3), 36, 10.0)
+				main.audio.play("boss_slam", 0.0, 0.85)
+				var lx: float = main.player.pos.x - px[i]
+				var lz: float = main.player.pos.z - pz[i]
+				if lx * lx + lz * lz < LEAP_R * LEAP_R and main.player.pos.y < 3.0:
+					if main.player.hurt(dmg[i] * 1.2, px[i], pz[i]):
+						main.game.note_hit("kralice")
+				if main.bot_mode:
+					print("T BOSS landed t=%.1f keeper=%.1f" % [main.game.time, sqrt(lx * lx + lz * lz)])
+				return Vector2.ZERO
+			# straight to the marked spot, arriving exactly when the time runs out
+			var left := maxf(boss_t, dt)
+			return Vector2((boss_leap.x - px[i]) / left, (boss_leap.y - pz[i]) / left)
 	return Vector2.ZERO
 
 func _boss_touch(i: int, d: float) -> void:

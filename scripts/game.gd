@@ -346,11 +346,15 @@ func shrine_done(at: Vector3) -> void:
 	main.weapons.shrine_mult += 0.15
 	main.player.heal(25.0)
 	mark("shrine")
+	# the blast kills a crowd in one frame: no freeze frames for those kills, they read as the game hanging
+	quiet_kills = true
 	main.weapons.explode(at, 11.0, 70.0, "sunak")
+	quiet_kills = false
 	main.fx.shake(0.6)
 	main.audio.play("shrine")
 	main.ui.toast("Sunak uyandı, kalıcı +%15 hasar")
 
+var quiet_kills := false
 # who hurt the player, by source: only read by the bot telemetry
 var hits := {}
 # one-time hints, shown the first time each threat appears in a run
@@ -455,11 +459,13 @@ func on_enemy_killed(t: int, at: Vector3, elite: bool, s: float) -> void:
 		main.pickups.drop_item("chest", at)
 		main.fx.shake(0.5)
 		main.fx.explosion(at, 4.0, KILL_COL[t])
-		main.stop_for(0.09, true)
+		if not quiet_kills:
+			main.stop_for(0.09, true)
 	else:
 		if t == main.enemies.T_BRUTE:
 			main.fx.shake(0.36)
-			main.stop_for(0.045)
+			if not quiet_kills:
+				main.stop_for(0.045)
 		else:
 			main.fx.shake(0.2)
 		main.pickups.drop_gem(at, v)
