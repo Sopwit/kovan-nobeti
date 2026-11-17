@@ -257,7 +257,7 @@ func spawn(t: int, x: float, z: float, is_elite := false, hp_mult := 1.0) -> int
 	rad[i] = d.radius * s
 	spd[i] = d.speed * randf_range(0.9, 1.1) * (0.85 if is_elite else 1.0)
 	# the swarm bites a little harder every minute; the queen keeps her own numbers
-	var late: float = 1.0 if (t == T_BOSS or t >= T_STAG) else 1.0 + 0.035 * main.game.time / 60.0
+	var late: float = 1.0 if (t == T_BOSS or t >= T_STAG) else 1.0 + 0.06 * main.game.time / 60.0
 	dmg[i] = d.dmg * (1.6 if is_elite else 1.0) * late
 	flash[i] = 0.0
 	atk_cd[i] = 0.3
@@ -566,7 +566,7 @@ func update(dt: float) -> void:
 				mvz = nx * speed * 0.6
 			if timer[i] <= 0.0 and d < 16.0:
 				timer[i] = randf_range(3.4, 4.8)
-				fire_bullet(px[i] + nx * 0.6, pz[i] + nz * 0.6, nx, nz, 9.0, TYPES[T_SPIT].dmg)
+				fire_bullet(px[i] + nx * 0.6, pz[i] + nz * 0.6, nx, nz, 9.0, dmg[i])
 				flash[i] = 0.6
 		elif t == T_BOOM:
 			if st[i] == 0:

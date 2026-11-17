@@ -189,6 +189,7 @@ var focus_t := 0.0
 const BASE_PITCH := -0.62
 # a staged shot tilts the camera; afterwards it drifts back to where the player had it
 var pitch_keep := BASE_PITCH
+var cam_y := 0.0
 var pitch_back := false
 var mercy_cd := 0.0
 
@@ -390,13 +391,17 @@ func _update_camera(dt: float) -> void:
 		cam_pitch = lerpf(cam_pitch, pitch_keep, minf(1.0, dt * 2.5))
 		if absf(cam_pitch - pitch_keep) < 0.01:
 			pitch_back = false
-	var target := pos + Vector3(0, 1.3, 0) + Vector3(cos(cam_yaw), 0, -sin(cam_yaw)) * look_shift
+	# only the height is eased (a jump should not bounce the whole view); the orbit itself is rigid
+	cam_y = lerpf(cam_y, pos.y, minf(1.0, dt * 12.0)) if dt < 1.0 else pos.y
+	var target := Vector3(pos.x, cam_y + 1.3, pos.z) + Vector3(cos(cam_yaw), 0, -sin(cam_yaw)) * look_shift
 	if focus > 0.0:
 		target = target.lerp(focus_pos + Vector3(0, 2.5, 0), 0.3 * focus)
 	var back := Vector3(sin(cam_yaw) * cos(cam_pitch), -sin(cam_pitch), cos(cam_yaw) * cos(cam_pitch))
 	var want := target + back * cam_dist
 	want.y = maxf(want.y, 0.6)
-	cam.global_position = cam.global_position.lerp(want, minf(1.0, dt * 22.0)) if dt < 1.0 else want
+	# The camera sits exactly where the mouse put it. It used to ease toward that spot, which made
+	# every turn trail behind the hand and keep drifting after the mouse had stopped.
+	cam.global_position = want
 	cam.look_at(target + Vector3(0, 0.3, 0), Vector3.UP)
 	cam.h_offset = sh.x
 	cam.v_offset = sh.y

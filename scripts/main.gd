@@ -34,6 +34,8 @@ var bot
 
 var state := MENU
 var paused := false
+var last_frame_us := 0
+var was_paused := false
 var settings := {"sens": 1.0, "music": 0.9, "sfx": 0.9, "brightness": 1.0}
 var record := {"runs": 0, "best_time": 0.0, "best_kills": 0, "wins": 0}
 # the apiary: honey in the bank, levels of the permanent upgrades, honey earned by the last run
@@ -122,6 +124,8 @@ var debug_ui := "":
 			game.open_chest()
 		elif v == "keys":
 			_debug_keys()
+		elif v == "shrine":
+			_debug_shrine()
 		elif v == "pause":
 			toggle_pause()
 		elif v == "win":
@@ -138,6 +142,14 @@ func _debug_press(key: int) -> void:
 		e.keycode = key
 		e.pressed = down
 		Input.parse_input_event(e)
+
+# Test only: lets a crowd gather, then puts the keeper on a shrine that is about to wake.
+func _debug_shrine() -> void:
+	await get_tree().create_timer(22.0, true, false, true).timeout
+	var s: Dictionary = world.shrines[0]
+	player.pos = s.pos + Vector3(1.0, 0, 0)
+	s.charge = 0.93
+	print("T SHRINE placed alive=%d" % enemies.count)
 
 func _debug_keys() -> void:
 	ui.hold_choice = true
@@ -454,6 +466,14 @@ func _unhandled_input(ev: InputEvent) -> void:
 		player.look((ev as InputEventMouseMotion).screen_relative)
 
 func _process(dt: float) -> void:
+	if bot_mode:
+		# bot runs report every long frame with what happened just before it
+		var now := Time.get_ticks_usec()
+		var ms := (now - last_frame_us) / 1000.0
+		last_frame_us = now
+		if ms > 40.0 and ms < 5000.0 and state == PLAY and game.time > 4.0 and not get_tree().paused and not was_paused:
+			print("T HITCH ms=%d t=%d after=%s age=%dms" % [int(ms), int(game.time), game.last_event, Time.get_ticks_msec() - game.last_event_ms])
+		was_paused = get_tree().paused
 	if state == PLAY:
 		if get_tree().paused:
 			return

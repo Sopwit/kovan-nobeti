@@ -556,7 +556,7 @@ func blob_texture() -> Texture2D:
 		_blob = t
 	return _blob
 
-# Icons come from one generated 5x4 sheet; the ragged tile border of each cell is cropped away.
+# Icons come from two generated 5x4 sheets with their backgrounds cut out (tools/ikon_kes.py); the UI draws the cell behind them.
 func icon(i: int) -> Texture2D:
 	# 0 to 19 are on the first sheet, 20 to 39 on the second
 	var sheet := icon_sheet if i < 20 else icon_sheet2
@@ -567,7 +567,7 @@ func icon(i: int) -> Texture2D:
 	a.atlas = sheet
 	var cw := sheet.get_width() / 5.0
 	var ch := sheet.get_height() / 4.0
-	var m := 0.11
+	var m := 0.04
 	@warning_ignore("integer_division")
 	var row := i / 5
 	a.region = Rect2((i % 5) * cw + cw * m, row * ch + ch * m, cw * (1.0 - 2.0 * m), ch * (1.0 - 2.0 * m))

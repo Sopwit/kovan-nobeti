@@ -395,7 +395,7 @@ func call_hive() -> void:
 	var pl = main.player
 	var en = main.enemies
 	var p: Vector3 = pl.pos
-	ult_t = 5.0
+	ult_t = 4.0
 	ult_tick = 0.2
 	var hs: float = main.game.hp_scale()
 	for i in en.query(p.x, p.z, 13.0):
@@ -403,15 +403,16 @@ func call_hive() -> void:
 		var dz: float = en.pz[i] - p.z
 		var dl := sqrt(dx * dx + dz * dz) + 0.01
 		var big: bool = en.typ[i] == en.T_BOSS or en.typ[i] >= en.T_STAG
-		en.hurt(i, en.maxhp[i] * 0.05 if big else 20.0 * hs, dx / dl * 20.0, dz / dl * 20.0, "cagri")
+		# the call clears a crowd; against a champion or the queen it only buys a breath
+		en.hurt(i, en.maxhp[i] * 0.02 if big else 20.0 * hs, dx / dl * 20.0, dz / dl * 20.0, "cagri")
 	main.fx.explosion(p, 13.0, Color(1.0, 0.8, 0.2))
 	main.fx.explosion(p, 7.0, Color(1.0, 0.95, 0.6))
 	main.fx.shake(0.9)
 	main.audio.play("horn", 0.0, 1.25)
 	main.audio.play("shrine", -2.0, 1.4)
-	pl.inv_t = maxf(pl.inv_t, 1.2)
-	pl.heal(10.0)
+	pl.inv_t = maxf(pl.inv_t, 0.8)
 	main.game.slow(0.4, 0.3)
+	main.game.mark("ult")
 
 func _update_swarm(dt: float, p: Vector3) -> void:
 	wtime += dt
@@ -425,14 +426,14 @@ func _update_swarm(dt: float, p: Vector3) -> void:
 		ult_tick = 0.2
 		var hs: float = main.game.hp_scale()
 		var near: PackedInt32Array = en.query(p.x, p.z, 11.0)
-		for k in mini(near.size(), 10):
+		for k in mini(near.size(), 8):
 			var i: int = near[randi() % near.size()]
 			if en.dead[i] == 0:
 				var big: bool = en.typ[i] == en.T_BOSS or en.typ[i] >= en.T_STAG
-				en.hurt(i, en.maxhp[i] * 0.003 if big else 7.0 * hs, 0.0, 0.0, "cagri")
+				en.hurt(i, en.maxhp[i] * 0.001 if big else 7.0 * hs, 0.0, 0.0, "cagri")
 	swarm.visible = true
 	# the swarm spreads out fast, then thins as the call fades
-	var open := clampf((5.0 - ult_t) * 3.0, 0.0, 1.0)
+	var open := clampf((4.0 - ult_t) * 3.0, 0.0, 1.0)
 	var fade := clampf(ult_t * 1.6, 0.0, 1.0)
 	for k in SWARM_N:
 		var s := swarm_seed[k]

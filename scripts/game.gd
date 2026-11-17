@@ -70,6 +70,14 @@ var passives := {}
 var queue: Array[String] = []
 # champion prizes not opened yet: each turns the next chest into an evolution
 var evo_chests := 0
+var last_magnet := 0.0
+# what happened last and when (real ms), so a frame hitch in a bot run can be traced to its cause
+var last_event := ""
+var last_event_ms := 0
+
+func mark(ev: String) -> void:
+	last_event = ev
+	last_event_ms = Time.get_ticks_msec()
 var stats := {"taken": 0.0, "dealt": 0.0, "by": {}, "chests": 0, "shrines": 0}
 var spawn_acc := 0.0
 var next_wave := 60.0
@@ -112,6 +120,7 @@ func start() -> void:
 	passives = {}
 	queue.clear()
 	evo_chests = 0
+	last_magnet = 0.0
 	stats = {"taken": 0.0, "dealt": 0.0, "by": {}, "chests": 0, "shrines": 0}
 	spawn_acc = 3.0
 	hits = {}
@@ -157,7 +166,7 @@ func _need(l: int) -> int:
 
 func hp_scale() -> float:
 	var m := time / 60.0
-	return 1.0 + m * 0.3 + m * m * 0.06
+	return 1.0 + m * 0.3 + m * m * 0.075
 
 func upg(id: String) -> Dictionary:
 	for u in UPG:
@@ -336,6 +345,7 @@ func shrine_done(at: Vector3) -> void:
 	stats.shrines += 1
 	main.weapons.shrine_mult += 0.15
 	main.player.heal(25.0)
+	mark("shrine")
 	main.weapons.explode(at, 11.0, 70.0, "sunak")
 	main.fx.shake(0.6)
 	main.audio.play("shrine")
@@ -454,9 +464,11 @@ func on_enemy_killed(t: int, at: Vector3, elite: bool, s: float) -> void:
 			main.fx.shake(0.2)
 		main.pickups.drop_gem(at, v)
 		var roll := randf()
-		if roll < 0.004:
+		if roll < 0.004 and time - last_magnet > 100.0 and main.pickups.count_of("magnet") < 1:
+			# a magnet is an event, not scenery: one on the field, and a long wait before the next
+			last_magnet = time
 			main.pickups.drop_item("magnet", at)
-		elif roll < (0.16 if t == main.enemies.T_BRUTE else 0.013) and main.pickups.count_of("heal") < 5:
+		elif roll < (0.16 if t == main.enemies.T_BRUTE else 0.013) and main.pickups.count_of("heal") < 3:
 			main.pickups.drop_item("heal", at)
 
 func on_player_dead() -> void:
@@ -620,13 +632,13 @@ func update(dt: float) -> void:
 		last_kills = kills
 	if not over:
 		if ult < 1.0 and ult_bank > 0.0:
-			# never faster than one call every 38 seconds
-			var pay := minf(ult_bank, dt / 38.0)
+			# never faster than one call every 55 seconds
+			var pay := minf(ult_bank, dt / 55.0)
 			ult_bank -= pay
 			ult = minf(1.0, ult + pay)
 			if ult >= 1.0:
 				main.audio.play("levelup", -6.0, 1.5)
-				hint("ult", "Kovan Çağrısı hazır, Q'ya bas")
+				main.ui.ult_ready()
 		_spawn(dt)
 		# the music follows the day: afternoon, golden hour, night
 		if time >= 220.0 and not boss_spawned and main.audio.current == "oyun1":

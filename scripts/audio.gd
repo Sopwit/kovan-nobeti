@@ -5,8 +5,8 @@ extends Node
 const MUSIC_TARGET := -14.0
 # track -> measured integrated loudness (LUFS)
 const MUSIC := {
-	"menu": ["muzik_menu.mp3", -14.3],
-	"oyun1": ["muzik_oyun1.mp3", -14.3],
+	"menu": ["muzik_menu.mp3", -12.8],
+	"oyun1": ["muzik_oyun1.mp3", -11.3],
 	"oyun2": ["muzik_oyun2.mp3", -12.0],
 	"gece": ["muzik_gece.mp3", -13.3],
 	"boss": ["muzik_boss.mp3", -12.3],
