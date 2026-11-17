@@ -4,7 +4,9 @@ sit on badges drawn in code.
 usage: python3 tools/ikon_kes.py <in.png> <out.png>
 Per cell: the tile colour is the most common opaque colour, everything connected to the cell border
 that is transparent already or close to that colour goes, and the edge is feathered by colour
-distance. Holes the flood cannot reach (the middle of a ring) are keyed with a tighter threshold."""
+distance. Holes the flood cannot reach (the middle of a ring) are keyed with a tighter threshold.
+Run it on the original sheet only: on a sheet that is already cut it would take an icon's dark
+outline for the tile."""
 import sys
 import numpy as np
 from PIL import Image
@@ -26,6 +28,8 @@ def cut_cell(cell):
     h, w = a0.shape
     solid = a0 > 0.8
     dark = solid & (rgb.max(axis=2) < 90)          # the tile is always dark; icons rarely are
+    if not dark.any():
+        return rgb, a0   # an empty cell, or one with no tile left: nothing to cut
     q = (rgb[dark] // 10).astype(np.int64)
     keys = q[:, 0] * 10000 + q[:, 1] * 100 + q[:, 2]
     vals, counts = np.unique(keys, return_counts=True)

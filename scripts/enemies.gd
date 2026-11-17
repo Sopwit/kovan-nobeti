@@ -263,7 +263,7 @@ func spawn(t: int, x: float, z: float, is_elite := false, hp_mult := 1.0) -> int
 	rad[i] = d.radius * s
 	spd[i] = d.speed * randf_range(0.9, 1.1) * (0.85 if is_elite else 1.0)
 	# the swarm bites a little harder every minute; the queen keeps her own numbers
-	var late: float = 1.0 if (t == T_BOSS or t >= T_STAG) else 1.0 + 0.06 * main.game.time / 60.0
+	var late: float = 1.0 if (t == T_BOSS or t >= T_STAG) else late_scale()
 	dmg[i] = d.dmg * (1.6 if is_elite else 1.0) * late
 	flash[i] = 0.0
 	atk_cd[i] = 0.3
@@ -417,6 +417,10 @@ func height_of(i: int) -> float:
 		return f + sin(time * 5.0 + phase[i]) * 0.2
 	return 0.0
 
+# How much harder the ordinary swarm bites as the run goes on.
+func late_scale() -> float:
+	return 1.0 + 0.035 * main.game.time / 60.0
+
 # Returns true when the hit killed the enemy.
 func hurt(i: int, amount: float, kx: float, kz: float, src: String, crit := false) -> bool:
 	if i < 0 or i >= count or dead[i] == 1:
@@ -425,6 +429,9 @@ func hurt(i: int, amount: float, kx: float, kz: float, src: String, crit := fals
 	if t == T_BOSS:
 		amount *= main.game.boss_tired()
 	hp[i] -= amount
+	if t == T_BOSS and hp[i] <= 0.0 and (boss_state == 3 or boss_state == 5):
+		# she does not die in mid-air: the next hit after she lands ends it, so the body falls where it stands
+		hp[i] = 1.0
 	if t == T_BOSS or t >= T_STAG:
 		# hit many times a second, a big body would stay white: one short pulse, then a rest that shows its skin
 		if flash[i] <= -1.4:
@@ -791,7 +798,7 @@ func _pop(x: float, z: float, hits_player: bool) -> void:
 		var pdx: float = pl.pos.x - x
 		var pdz: float = pl.pos.z - z
 		if pdx * pdx + pdz * pdz < (POP_R + 0.2) * (POP_R + 0.2) and pl.pos.y < 2.6:
-			if pl.hurt(TYPES[T_BOOM].dmg * (1.0 + 0.035 * main.game.time / 60.0), x, z):
+			if pl.hurt(TYPES[T_BOOM].dmg * late_scale(), x, z):
 				main.game.note_hit("patlak")
 
 func _update_pops(dt: float) -> void:

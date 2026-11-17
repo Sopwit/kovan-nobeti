@@ -241,7 +241,7 @@ func _badge(size: float, tex: Texture2D, tint := AMBER) -> Control:
 	c.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	c.set_meta("tex", tex)
 	c.set_meta("tint", tint)
-	c.draw.connect(func(): _draw_badge(c, c.size * 0.5, size * 0.5 - 3.0, c.get_meta("tex"), c.get_meta("tint")))
+	c.draw.connect(func(): _draw_badge(c, c.size * 0.5, size * 0.5 - 3.0, c.get_meta("tex", null), c.get_meta("tint", AMBER)))
 	return c
 
 func _set_badge(c: Control, tex: Texture2D, tint: Color) -> void:
@@ -718,7 +718,7 @@ func _build_choice() -> void:
 	v.add_child(h)
 	for i in 3:
 		var b := Button.new()
-		b.custom_minimum_size = Vector2(390, 524)
+		b.custom_minimum_size = Vector2(390, 598)
 		b.add_theme_stylebox_override("normal", _style(Color(BARK, 0.98), Color(WAX, 0.8), 2, 28, 0))
 		b.add_theme_stylebox_override("hover", _style(BARK2, CREAM, 3, 28, 0))
 		b.add_theme_stylebox_override("focus", _style(BARK2, CREAM, 3, 28, 0))
@@ -769,7 +769,7 @@ func _build_choice() -> void:
 		body.add_theme_constant_override("separation", 8)
 		body.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		pad.add_child(body)
-		var badge := _badge(192, null)
+		var badge := _badge(176, null)
 		badge.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 		body.add_child(badge)
 		var nm := _label("", 34, CREAM)
@@ -781,7 +781,7 @@ func _build_choice() -> void:
 		var lv := _label("", 22, AMBER)
 		lv.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		body.add_child(lv)
-		var ds := _label("", 26, Color(0.95, 0.89, 0.78), false)
+		var ds := _label("", 24, Color(0.95, 0.89, 0.78), false)
 		ds.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		ds.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		ds.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -806,7 +806,7 @@ func _build_choice() -> void:
 		ev.custom_minimum_size = Vector2(262, 0)
 		ev.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		foot.add_child(ev)
-		cards.append({"button": b, "band": band, "kind": kind, "badge": badge, "name": nm, "pips": pips, "level": lv, "desc": ds, "line": line, "foot": foot, "pair": pair, "evo": ev})
+		cards.append({"button": b, "box": box, "band": band, "kind": kind, "badge": badge, "name": nm, "pips": pips, "level": lv, "desc": ds, "line": line, "foot": foot, "pair": pair, "evo": ev})
 	# a few times per run the three cards can be drawn again
 	reroll_btn = _button("Yenile", func(): _reroll())
 	reroll_btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
@@ -882,6 +882,8 @@ func show_choice(kind: String, list: Array, again := false) -> void:
 			c.evo.text = need_text
 			c.evo.add_theme_color_override("font_color", AMBER if met else MUTED)
 	choice_panel.visible = true
+	if main.bot_mode:
+		_check_cards()
 	if again:
 		return
 	choice_panel.modulate.a = 0.0
@@ -892,6 +894,14 @@ func show_choice(kind: String, list: Array, again := false) -> void:
 	var held := get_viewport().gui_get_focus_owner()
 	if held != null:
 		held.release_focus()
+
+# Bot telemetry: a card whose text needs more room than the card has.
+func _check_cards() -> void:
+	await get_tree().process_frame
+	for i in mini(cards.size(), card_data.size()):
+		var need: float = (cards[i].box as Control).get_combined_minimum_size().y + 10.0
+		if need > (cards[i].button as Control).size.y + 0.5:
+			print("T CARD tall id=%s kind=%s needs=%d has=%d" % [card_data[i].id, choice_kind, int(need), int((cards[i].button as Control).size.y)])
 
 func _choose(i: int) -> void:
 	if not choosing or choice_lock > 0.0 or main.paused:

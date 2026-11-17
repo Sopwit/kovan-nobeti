@@ -185,6 +185,7 @@ func buffer_input() -> void:
 # For a staged moment the camera turns to a point in the world and narrows; the keeper stays in control.
 var focus_pos := Vector3.ZERO
 var focus_t := 0.0
+var focus_len := 0.0
 # the camera sits high enough behind the keeper that the swarm chasing them stays on screen
 const BASE_PITCH := -0.62
 # a staged shot tilts the camera; afterwards it drifts back to where the player had it
@@ -198,6 +199,7 @@ func focus_on(p: Vector3, secs: float) -> void:
 		pitch_keep = cam_pitch
 	focus_pos = p
 	focus_t = secs
+	focus_len = secs
 	pitch_back = true
 
 # Takes real seconds (the world is held still); the camera code expects scaled time and converts back itself.
@@ -382,7 +384,8 @@ func _update_camera(dt: float) -> void:
 	if focus_t > 0.0 and dt < 1.0:
 		var real := dt / maxf(0.05, Engine.time_scale)
 		focus_t -= real
-		focus = clampf(focus_t * 1.5, 0.0, 1.0)
+		# eased at both ends: the orbit is rigid now, so a shot that started at full weight would cut
+		focus = clampf(focus_t * 1.5, 0.0, 1.0) * smoothstep(0.0, 0.35, focus_len - focus_t)
 		var to := focus_pos - pos
 		if Vector2(to.x, to.z).length() > 1.5:
 			cam_yaw = lerp_angle(cam_yaw, atan2(-to.x, -to.z), minf(1.0, real * 4.0 * focus))

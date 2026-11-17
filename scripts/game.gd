@@ -166,7 +166,7 @@ func _need(l: int) -> int:
 
 func hp_scale() -> float:
 	var m := time / 60.0
-	return 1.0 + m * 0.3 + m * m * 0.075
+	return 1.0 + m * 0.3 + m * m * 0.06
 
 func upg(id: String) -> Dictionary:
 	for u in UPG:
@@ -470,11 +470,13 @@ func on_enemy_killed(t: int, at: Vector3, elite: bool, s: float) -> void:
 			main.fx.shake(0.2)
 		main.pickups.drop_gem(at, v)
 		var roll := randf()
-		if roll < 0.004 and time - last_magnet > 100.0 and main.pickups.count_of("magnet") < 1:
-			# a magnet is an event, not scenery: one on the field, and a long wait before the next
-			last_magnet = time
-			main.pickups.drop_item("magnet", at)
-		elif roll < (0.16 if t == main.enemies.T_BRUTE else 0.013) and main.pickups.count_of("heal") < 3:
+		if roll < 0.004:
+			# a magnet is an event, not scenery: one on the field, and a long wait before the next.
+			# A roll the wait turns down drops nothing: it must not become a heal jar instead.
+			if time - last_magnet > 100.0 and main.pickups.count_of("magnet") < 1:
+				last_magnet = time
+				main.pickups.drop_item("magnet", at)
+		elif roll < (0.16 if t == main.enemies.T_BRUTE else 0.013) and main.pickups.count_of("heal") < 4:
 			main.pickups.drop_item("heal", at)
 
 func on_player_dead() -> void:
