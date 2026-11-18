@@ -1,6 +1,10 @@
 # Kovan Nöbeti
 Üçüncü şahıs kamerayla oynanan, 10 dakikalık bir hayatta kalma oyunu. Bir arıcısın, böcek sürüsü Ana Kovan'a saldırıyor. Silahların kendi ateş eder; senin işin koşmak, zıplamak, kaymak, toplamak ve doğru anda kovanı yardıma çağırmak. Godot 4.7 ile yapıldı.
 
+## İndir
+
+Derlenmiş sürümler [Releases](https://github.com/yusufipk/kovan-nobeti/releases/latest) sayfasında. Windows'ta `.exe` dosyasını indirip çalıştır. Linux'ta `.x86_64` dosyasını indir, `chmod +x` ile çalıştırılabilir yap ve çalıştır.
+
 ## Nasıl oynanır
 Klasörü Godot 4.7 ile aç ve F5'e bas ya da klasörün içinde şunu çalıştır:
 
@@ -132,7 +136,6 @@ Sürekli çalan tek ses müzik. Menü, oyunun ilk bölümü, gün batımı, gece
 - Ayarlar, rekor, bal ve Arılık geliştirmeleri `user://kovan_nobeti.json` dosyasına düz JSON olarak yazılıyor, elle değiştirilebilir. Bot hiç yazmadığı için oyunun kendi kayıt yolu elle denenmedi; yalnız yazma sırası (geçici dosyaya yaz, yerine taşı) ayrı bir betikle denendi. Tur sonu gösterisi sürerken (2-4 saniye) pencere kapatılırsa o turun balı yazılmaz.
 - `tools/` altındaki betikler tek kullanıcılı bir geliştirme makinesi için yazıldı, çıktı klasörü ve kilit dosyası `/var/tmp` altında sabit adlarla duruyor.
 - Başarım yalnız bu makinede ölçüldü, ekranda yaklaşık 170 düşmanla 145 kare/sn çıktı. Daha kalabalık durumlar yalnız ekransız bot turlarında görüldü, orada kare hızı ölçülmedi.
-- `project.godot` yerel Beckett eklentisini çağırıyor, eklenti depoda değil. Temiz bir kopyada Godot açılışta eksik eklenti hatası yazar; oyun yine çalışır (temiz kopya ilk aşamada ekransız bir bot turuyla denendi). Bu makinede alınacak bir dışa aktarım eklentinin otomatik yüklenen betiğini de içerir; betik editör dışında kendini kapatıyor ama o kod benim değil, dağıtmadan önce `project.godot` içindeki iki Beckett satırını silmek daha doğru.
 
 ## Süre
 İlk aşama 16 Kasım 2026'da 11:37'de başladı, 14:45'te bitti. İkinci aşama aynı gün 14:46'da başladı, 16:45'te bitti, yaklaşık 2 saat sürdü. İnceleme revizesi aynı gün 17:35'te başladı, 18:30'da bitti. Son düzeltme turu 17 Kasım 2026'da 14:55'te başladı, 15:56'da bitti.
