@@ -20,6 +20,8 @@ const Bot := preload("res://scripts/bot.gd")
 
 enum { MENU, PLAY, END }
 
+var quitting := false
+
 var assets
 var world
 var player
@@ -178,6 +180,7 @@ var debug_start := false:
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	get_tree().auto_accept_quit = false
 	_setup_input()
 	_load()
 	var want_time := -1.0
@@ -266,6 +269,10 @@ func _setup_input() -> void:
 	var mb := InputEventMouseButton.new()
 	mb.button_index = MOUSE_BUTTON_RIGHT
 	InputMap.action_add_event("ult", mb)
+	# Jump should never activate a focused menu button.
+	for event in InputMap.action_get_events("ui_accept"):
+		if event is InputEventKey and (event.keycode == KEY_SPACE or event.physical_keycode == KEY_SPACE):
+			InputMap.action_erase_event("ui_accept", event)
 
 func _num(v) -> bool:
 	return (typeof(v) == TYPE_FLOAT or typeof(v) == TYPE_INT) and is_finite(float(v))
@@ -422,7 +429,7 @@ func _notification(what: int) -> void:
 		if state == PLAY and not paused and not bot_mode:
 			toggle_pause()
 	elif what == NOTIFICATION_WM_CLOSE_REQUEST:
-		save_settings()
+		quit_game()
 
 func finish_run(victory: bool) -> void:
 	state = END
@@ -441,11 +448,19 @@ func finish_run(victory: bool) -> void:
 	release_mouse()
 	ui.show_end(victory, new_record)
 	if bot_mode and bot_once:
-		get_tree().quit()
+		quit_game()
 
 func quit_game() -> void:
+	if quitting:
+		return
+	quitting = true
 	save_settings()
-	get_tree().quit()
+	set_process(false)
+	audio.stop_for_exit()
+	var tree := get_tree()
+	tree.paused = true
+	await tree.create_timer(maxf(0.1, AudioServer.get_output_latency() * 2.0), true, false, true).timeout
+	tree.quit()
 
 func _unhandled_input(ev: InputEvent) -> void:
 	if ev.is_action_pressed("fullscreen"):

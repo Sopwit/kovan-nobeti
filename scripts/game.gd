@@ -60,6 +60,7 @@ const CHAMP_NAMES := ["MAKAS", "AKREP"]
 
 var main
 var active := false
+var royal_shields := 0
 var time := 0.0
 var kills := 0
 var level := 1
@@ -111,6 +112,7 @@ func setup(m) -> void:
 
 func start() -> void:
 	active = true
+	royal_shields = 0
 	time = 0.0
 	kills = 0
 	level = 1
@@ -341,7 +343,7 @@ func _evo_moment(id: String) -> void:
 	if main.bot_mode:
 		print("T EVO %s t=%d lv=%d" % [id, int(time), level])
 
-func shrine_done(at: Vector3) -> void:
+func shrine_done(at: Vector3, defended := false) -> void:
 	stats.shrines += 1
 	main.weapons.shrine_mult += 0.15
 	main.player.heal(25.0)
@@ -352,7 +354,11 @@ func shrine_done(at: Vector3) -> void:
 	quiet_kills = false
 	main.fx.shake(0.6)
 	main.audio.play("shrine")
-	main.ui.toast("Sunak uyandı, kalıcı +%15 hasar")
+	if defended:
+		main.pickups.drop_item("chest", at + Vector3(2.0, 0.0, 0.0))
+		main.ui.toast("Nöbet tamamlandı: +%15 hasar ve bir sandık")
+	else:
+		main.ui.toast("Sunak uyandı, koşu boyunca +%15 hasar")
 
 var quiet_kills := false
 # who hurt the player, by source: only read by the bot telemetry
@@ -450,7 +456,8 @@ func on_enemy_killed(t: int, at: Vector3, elite: bool, s: float) -> void:
 		var prize := not _evo_ids().is_empty()
 		if prize:
 			evo_chests += 1
-		main.ui.banner(CHAMP_NAMES[t - main.enemies.T_STAG] + " DEVRİLDİ", "Sandığı bir silahını evriltir" if prize else "Sandığını al")
+		main.ui.banner(CHAMP_NAMES[t - main.enemies.T_STAG] + " DEVRİLDİ", "Kraliçe için kalkan kazandın · Evrim sandığı" if prize else "Kraliçe için kalkan kazandın · Sandığını al")
+		royal_shields += 1
 		stats.champs = stats.get("champs", 0) + 1
 		return
 	var v: int = main.enemies.TYPES[t].xp

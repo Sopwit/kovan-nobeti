@@ -863,18 +863,19 @@ func show_choice(kind: String, list: Array, again := false) -> void:
 		c.band.bg_color = tone
 		_set_badge(c.badge, icons.get(u.icon), tone)
 		c.name.add_theme_color_override("font_color", AMBER if u.kind == "e" else CREAM)
-		# the evolution partner of this card: a trait for a weapon, a weapon for a trait
 		var partner: String = "" if not levelled else main.game.evo_partner(u.id)
 		var need_text := ""
 		var met := false
-		if partner != "" and u.kind == "w":
-			var need: Array = main.game.EVO[u.id]
-			need_text = "Evrim için 6. seviye ve %s %d" % [main.game.upg(need[0]).name, need[1]]
-			met = main.game.evo_ready(u.id)
-		elif partner != "" and main.game.level_of(partner) <= main.game.upg(partner).max:
-			var need2: Array = main.game.EVO[partner]
-			met = l >= int(need2[1])
-			need_text = ("%s evrimi için yeterli" % main.game.upg(partner).name) if met else "%s evrimi için %d gerek" % [main.game.upg(partner).name, need2[1]]
+		if partner != "":
+			var weapon: String = u.id if u.kind == "w" else partner
+			var recipe: Array = main.game.EVO[weapon]
+			var weapon_cap: int = main.game.upg(weapon).max
+			var owned_level: int = main.game.level_of(weapon)
+			if owned_level <= weapon_cap:
+				var weapon_level: int = mini(weapon_cap, owned_level + (1 + int(twice) if u.kind == "w" else 0))
+				var trait_level: int = main.game.level_of(recipe[0]) + (1 + int(twice) if u.kind == "p" else 0)
+				met = weapon_level == weapon_cap and trait_level >= int(recipe[1])
+				need_text = "%s · %d/%d\n%s · %d/%d" % [recipe[2], weapon_level, weapon_cap, main.game.upg(recipe[0]).name, mini(trait_level, int(recipe[1])), recipe[1]]
 		c.line.visible = need_text != ""
 		c.foot.visible = need_text != ""
 		if need_text != "":
@@ -973,8 +974,7 @@ func _build_end() -> void:
 	bh.add_child(end_hive)
 	end_menu = _button("Ana menü", func(): main.to_menu())
 	bh.add_child(end_menu)
-	for eb in [end_again, end_hive, end_menu]:
-		eb.focus_mode = Control.FOCUS_NONE
+
 
 func _stat_row(parent: Container, name: String, value: String, col := CREAM) -> void:
 	var row := HBoxContainer.new()
@@ -1063,10 +1063,11 @@ func _process(dt: float) -> void:
 	if end_panel.visible and end_lock > 0.0:
 		end_lock -= dt
 		if end_lock <= 0.0:
-			# no button takes focus: nothing on this screen reacts to the jump key
+			# Space remains reserved for jumping, even when a button has focus.
 			end_again.disabled = false
 			end_menu.disabled = false
 			end_hive.disabled = false
+			end_again.grab_focus()
 	# hints and toasts wait while the game is paused, so a level-up cannot swallow them
 	if not get_tree().paused:
 		# a toast waits for a banner to clear instead of running out behind it
@@ -1095,9 +1096,9 @@ func bot_pick(list: Array) -> int:
 
 func _input(ev: InputEvent) -> void:
 	if end_panel.visible and end_lock <= 0.0 and ev is InputEventKey and ev.pressed and not ev.echo:
-		# the end screen restarts on Enter only: the jump key held through a death must not skip it
+		# Enter retries when the mouse or a click has left no focused button.
 		var ek: int = (ev as InputEventKey).physical_keycode
-		if ek == KEY_ENTER or ek == KEY_KP_ENTER:
+		if (ek == KEY_ENTER or ek == KEY_KP_ENTER) and get_viewport().gui_get_focus_owner() == null:
 			get_viewport().set_input_as_handled()
 			main.start_run()
 			return
@@ -1206,6 +1207,8 @@ func _draw_hud() -> void:
 		_text(hud, Vector2(W * 0.5 - 212, 84), "%02d" % (secs / 60), 60, col, HORIZONTAL_ALIGNMENT_RIGHT, 200)
 		_text(hud, Vector2(W * 0.5 - 12, 80), ":", 60, col, HORIZONTAL_ALIGNMENT_CENTER, 24)
 		_text(hud, Vector2(W * 0.5 + 12, 84), "%02d" % (secs % 60), 60, col, HORIZONTAL_ALIGNMENT_LEFT, 200)
+	if g.royal_shields > 0:
+		_text(hud, Vector2(W * 0.5 - 230, 124), "Kraliçe nöbeti kalkanı ×%d" % g.royal_shields, 24, AMBER, HORIZONTAL_ALIGNMENT_CENTER, 460)
 	# health and slide
 	var hw := 460.0
 	var hr := Rect2(W * 0.5 - hw * 0.5, H - 78, hw, 30)
@@ -1271,7 +1274,7 @@ func _draw_hud() -> void:
 		hud.draw_arc(Vector2(W * 0.5, H * 0.5), H * 0.34, hang - 0.42, hang + 0.42, 18, Color(1.0, 0.12, 0.1, 0.8 * hal), 20.0)
 		hud.draw_arc(Vector2(W * 0.5, H * 0.5), H * 0.34 + 14.0, hang - 0.3, hang + 0.3, 14, Color(1.0, 0.55, 0.4, 0.9 * hal), 5.0)
 	if main.world.shrine_progress >= 0.0:
-		_text(hud, Vector2(W * 0.5 - 200, H * 0.70), "Sunak uyanıyor", 26, TEAL, HORIZONTAL_ALIGNMENT_CENTER, 400)
+		_text(hud, Vector2(W * 0.5 - 200, H * 0.70), main.world.shrine_status, 26, TEAL, HORIZONTAL_ALIGNMENT_CENTER, 400)
 		_bar(hud, Rect2(W * 0.5 - 170, H * 0.70 + 12, 340, 14), main.world.shrine_progress, TEAL)
 	if banner_t > 0.0 and not choosing:
 		var ba := clampf(banner_t * 1.5, 0.0, 1.0) * clampf((3.0 - banner_t) * 6.0, 0.0, 1.0)

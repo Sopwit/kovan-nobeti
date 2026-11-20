@@ -143,6 +143,13 @@ func _play(n: String, blend := 0.12) -> void:
 func hurt(amount: float, fx: float, fz: float) -> bool:
 	if not alive or inv_t > 0.0 or main.debug_god:
 		return false
+	if amount > 0.0 and main.game.boss_spawned and not main.game.over and main.game.royal_shields > 0:
+		main.game.royal_shields -= 1
+		inv_t = 0.6
+		main.fx.burst(pos + Vector3.UP, Color(1.0, 0.86, 0.45), 15, 5.0)
+		main.audio.play("shrine")
+		main.ui.toast("Kraliçe nöbeti kalkanı darbeyi engelledi")
+		return false
 	var a := maxf(1.0, amount - armor)
 	var was_low := hp < max_hp * 0.3
 	hp -= a

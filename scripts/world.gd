@@ -2,6 +2,8 @@ extends Node3D
 # The meadow: ground, light, scenery, obstacles and the rewards worth walking to.
 
 const ARENA_R := 74.0
+const SHRINE_WATCH_TIME := 12.0
+const SHRINE_RADIUS := 5.0
 
 var main
 var env: Environment
@@ -14,6 +16,7 @@ var chest_timer := 0.0
 var hive_mat: StandardMaterial3D
 var poi_root: Node3D
 var shrine_progress := -1.0
+var shrine_status := ""
 var time := 0.0
 var rng := RandomNumberGenerator.new()
 var sun: DirectionalLight3D
@@ -642,7 +645,7 @@ func reset() -> void:
 	var sh_mesh: Mesh = main.assets.prop_mesh("sunak")
 	for i in 4:
 		var a2 := TAU * i / 4.0 + rng.randf_range(0.2, 1.2)
-		var p2 := _spot_near(a2, rng.randf_range(34.0, 58.0))
+		var p2 := _spot_near(a2, rng.randf_range(25.0, 30.0) if i == 0 else rng.randf_range(34.0, 58.0))
 		var n2 := Node3D.new()
 		n2.position = Vector3(p2.x, 0, p2.y)
 		var mi2 := MeshInstance3D.new()
@@ -653,7 +656,7 @@ func reset() -> void:
 		var ring := MeshInstance3D.new()
 		var tm := TorusMesh.new()
 		tm.inner_radius = 4.75
-		tm.outer_radius = 5.0
+		tm.outer_radius = SHRINE_RADIUS
 		tm.rings = 48
 		tm.ring_segments = 4
 		ring.mesh = tm
@@ -669,7 +672,7 @@ func reset() -> void:
 		n2.add_child(beam)
 		poi_root.add_child(n2)
 		obstacles.append(Vector3(p2.x, p2.y, 1.5))
-		shrines.append({"node": n2, "pos": Vector3(p2.x, 0, p2.y), "charge": 0.0, "done": false, "ring": rm, "beam": beam})
+		shrines.append({"node": n2, "pos": Vector3(p2.x, 0, p2.y), "charge": 0.0, "done": false, "ring": rm, "beam": beam, "watch": i == 0, "elapsed": 0.0, "wave": 0})
 	var jar_mesh: Mesh = main.assets.prop_mesh("kavanoz")
 	for i in 7:
 		var p3 := _free_spot(14.0, ARENA_R - 6.0, 3.0)
@@ -745,22 +748,7 @@ func update(dt: float) -> void:
 			main.fx.burst(c.pos + Vector3(0, 1.2, 0), Color(1.0, 0.85, 0.2), 28, 8.0)
 			main.audio.play("chest")
 			main.game.open_chest()
-	shrine_progress = -1.0
-	for s in shrines:
-		if s.done:
-			continue
-		var d := Vector2(p.x - s.pos.x, p.z - s.pos.z).length()
-		if d < 5.0:
-			s.charge = minf(1.0, s.charge + dt / 5.0)
-			shrine_progress = s.charge
-			s.ring.albedo_color = Color(0.2, 0.9, 0.8).lerp(Color(1.0, 0.9, 0.3), s.charge)
-			if s.charge >= 1.0:
-				s.done = true
-				s.ring.albedo_color = Color(0.4, 0.4, 0.45)
-				s.beam.visible = false
-				main.game.shrine_done(s.pos)
-		else:
-			s.charge = maxf(0.0, s.charge - dt * 0.25)
+	_update_shrines(p, dt)
 	for j in jars:
 		if j.taken:
 			continue
@@ -773,3 +761,49 @@ func update(dt: float) -> void:
 			main.fx.burst(j.pos + Vector3(0, 1.0, 0), Color(1.0, 0.5, 0.5), 14, 5.0)
 			main.audio.play("heal")
 			main.ui.toast("+35 can")
+
+func _update_shrines(player_pos: Vector3, dt: float) -> void:
+	shrine_progress = -1.0
+	shrine_status = ""
+	for shrine in shrines:
+		if shrine.done:
+			continue
+		var offset: Vector3 = player_pos - shrine.pos
+		var distance := Vector2(offset.x, offset.z).length()
+		if distance >= SHRINE_RADIUS:
+			if shrine.watch and shrine.elapsed > 0.0:
+				shrine.done = true
+				shrine.beam.hide()
+				shrine.ring.albedo_color = Color(0.4, 0.4, 0.45)
+				main.ui.toast("Nöbet bozuldu, koşuya devam et")
+			else:
+				shrine.charge = maxf(0.0, shrine.charge - dt * 0.25)
+			continue
+		shrine_progress = shrine.charge
+		shrine_status = "Nöbet sunağı · +%15 hasar ve sandık" if shrine.watch else "Sunak uyanıyor"
+		shrine.charge = minf(1.0, shrine.charge + dt / (2.0 if shrine.watch else 5.0))
+		shrine.ring.albedo_color = Color(0.2, 0.9, 0.8).lerp(Color(1.0, 0.9, 0.3), shrine.charge)
+		if shrine.charge < 1.0:
+			continue
+		if shrine.watch:
+			shrine.elapsed += dt
+			var remaining := maxf(0.0, SHRINE_WATCH_TIME - shrine.elapsed)
+			shrine_progress = 1.0 - remaining / SHRINE_WATCH_TIME
+			shrine_status = "Çemberde kal · %d sn" % ceili(remaining)
+			if remaining > 0.0:
+				var wave := int(shrine.elapsed / 4.0) + 1
+				if wave > shrine.wave:
+					shrine.wave = wave
+					_spawn_watch_wave(shrine.pos, wave)
+				continue
+		shrine.done = true
+		shrine.ring.albedo_color = Color(0.4, 0.4, 0.45)
+		shrine.beam.hide()
+		main.game.shrine_done(shrine.pos, shrine.watch)
+
+func _spawn_watch_wave(center: Vector3, wave: int) -> void:
+	var count := 3 + wave
+	for i in count:
+		var angle := TAU * i / count + wave
+		var at := Vector2(center.x, center.z) + Vector2(cos(angle), sin(angle)) * 9.0
+		main.enemies.spawn(main.enemies.T_BEETLE, at.x, at.y)

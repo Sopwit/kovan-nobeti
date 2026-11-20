@@ -65,6 +65,8 @@ var clock := 0.0
 func setup(m) -> void:
 	main = m
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	if DisplayServer.get_name() == "headless":
+		return
 	for bus in ["Music", "SFX"]:
 		if AudioServer.get_bus_index(bus) < 0:
 			AudioServer.add_bus()
@@ -98,6 +100,8 @@ func setup(m) -> void:
 	apply_volumes()
 
 func apply_volumes() -> void:
+	if music_a == null:
+		return
 	var mi := AudioServer.get_bus_index("Music")
 	var si := AudioServer.get_bus_index("SFX")
 	AudioServer.set_bus_volume_db(mi, linear_to_db(maxf(0.0001, main.settings.music)))
@@ -106,7 +110,7 @@ func apply_volumes() -> void:
 	AudioServer.set_bus_mute(si, main.settings.sfx <= 0.001)
 
 func play(n: String, extra_db := 0.0, pitch := 1.0) -> void:
-	if not streams.has(n):
+	if main.quitting or not streams.has(n):
 		return
 	var gap: float = SFX[n][2]
 	if clock - float(last_play.get(n, -10.0)) < gap:
@@ -127,7 +131,7 @@ func play(n: String, extra_db := 0.0, pitch := 1.0) -> void:
 
 # Crossfade to another track. The old track keeps playing until the new one is up: no silent gap.
 func music(n: String) -> void:
-	if n == current or not music_streams.has(n):
+	if main.quitting or n == current or not music_streams.has(n):
 		return
 	current = n
 	# a switch in the middle of a crossfade starts from the level the incoming track had reached
@@ -142,6 +146,14 @@ func music(n: String) -> void:
 	music_a.volume_db = -60.0
 	music_a.play()
 	fade = 0.0
+
+func stop_for_exit() -> void:
+	set_process(false)
+	if music_a == null:
+		return
+	for player in pool + long_pool + [music_a, music_b]:
+		player.stop()
+		player.stream = null
 
 func _process(dt: float) -> void:
 	clock += dt
