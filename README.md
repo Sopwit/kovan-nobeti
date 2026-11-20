@@ -8,6 +8,10 @@ Godot 4.7 ile geliştirilmiş üçüncü şahıs hayatta kalma oyunu. Sürülere
 - **Şampiyon kalkanları.** Makas ve Akrep’in her biri, Kraliçe savaşında bir darbeyi engelleyen bir kalkan kazandırır.
 - **Silah evrimleri.** Yükseltme kartları, seçimden sonraki silah ve pasif seviye ilerlemesini gösterir.
 
+## İndir
+
+[**Kovan Nöbeti 1.0.0 RC 1**](https://github.com/Sopwit/kovan-nobeti/releases/tag/v1.0.0-rc.1) ön sürümünde macOS Universal ZIP, Windows x64 EXE ve Linux x64 paketleri var. Kurulum adımları ve platform testlerinin durumu sürüm notlarında.
+
 ## Oyna
 
 Kaynak kodunu Godot 4.7 ile aç ve **F5** ile başlat. WASD ile hareket et, fare ile kamerayı çevir, Boşluk ile zıpla ve Shift ile kay. Kovan Çağrısı hazır olduğunda Q veya sağ tıkla kullan.
